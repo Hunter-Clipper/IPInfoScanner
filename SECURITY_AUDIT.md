@@ -333,7 +333,7 @@ const flagImg = safeCode
 | LOW-04 | No CSP | `index.html` | Low | **Fixed** | CSP meta tag added; `default-src 'none'` with narrow allowlist |
 | INFO-01 | API key in URL param | `worker.js` | Info | **Fixed** | Moved to `x-goog-api-key` header |
 | INFO-02 | Open CORS | `worker.js` | Info | **Fixed** | Dynamic origin reflection + `isAllowedOrigin` 403 check |
-| INFO-03 | No clickjacking protection | `_headers` | Info | **Fixed** | `X-Frame-Options: DENY` set via Cloudflare Pages `_headers` file; also adds `X-Content-Type-Options: nosniff` |
+| INFO-03 | No clickjacking protection | `.htaccess` | Info | **Fixed** | `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff` set via Apache `.htaccess` |
 | INFO-04 | No SRI for external CDNs | `index.html` | Info | **Fixed** | Google Fonts @import removed; system font stack used; countryCode validated |
 
 ---
