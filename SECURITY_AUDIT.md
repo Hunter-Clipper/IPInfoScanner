@@ -18,7 +18,7 @@ Ranked from most to least severe across both files.
 
 ### Tier 2 — Low *(fix before production hardening)*
 
-- LOW-01 — Prompt injection in `/analyze` (worker.js)
+- ~~LOW-01 — Prompt injection in `/analyze` (worker.js)~~ ✅ Fixed
 - ~~LOW-02 — HTTP tried before HTTPS for ip-api.com (worker.js)~~ ✅ Fixed
 - LOW-03 — API keys stored in localStorage (index.html)
 - LOW-04 — No Content Security Policy (index.html)
@@ -37,9 +37,9 @@ Ranked from most to least severe across both files.
 | Severity | Total | Open | Fixed | Accepted |
 |---|---|---|---|---|
 | Medium | 2 | 0 | 2 | 0 |
-| Low | 4 | 3 | 1 | 0 |
+| Low | 4 | 2 | 2 | 0 |
 | Info | 4 | 1 | 3 | 0 |
-| **Total** | **10** | **4** | **6** | **0** |
+| **Total** | **10** | **3** | **7** | **0** |
 
 ---
 
@@ -327,7 +327,7 @@ const flagImg = safeCode
 |---|---|---|---|---|---|
 | MED-01 | No rate limiting | `worker.js` | Medium | **Fixed** | KV-backed `checkRateLimit()` — 30/hr lookup, 10/hr analyze |
 | MED-02 | Unsanitized innerHTML | `index.html` | Medium | **Fixed** | `esc()` helper; `v()` now escapes; all direct API values wrapped |
-| LOW-01 | Prompt injection | `worker.js` | Low | Open | Add `safe()` field sanitizer |
+| LOW-01 | Prompt injection | `worker.js` | Low | **Fixed** | `safe()` strips `\r\n\t`, collapses whitespace, caps per-field length; `ip` field validated against allowlist regex |
 | LOW-02 | HTTP before HTTPS | `worker.js` | Low | **Fixed** | HTTPS now tried first |
 | LOW-03 | API keys in localStorage | `index.html` | Low | Open | Depends on MED-02 fix; consider sessionStorage |
 | LOW-04 | No CSP | `index.html` | Low | Open | Add CSP meta tag |
@@ -351,3 +351,4 @@ const flagImg = safeCode
 | 2026-06-02 | Partial INFO-04 — countryCode validated against `/^[a-z]{2}$/` before flag URL; fonts remain external |
 | 2026-06-02 | Fixed MED-01 — KV-backed rate limiter (30/hr /lookup, 10/hr /analyze); requires RATE_LIMIT_KV binding |
 | 2026-06-02 | Fixed MED-02 — added `esc()` helper; `v()` now HTML-escapes all output; history, basic info, VT engines, Shodan banner updated |
+| 2026-06-02 | Fixed LOW-01 — `safe()` sanitizer strips newlines/tabs, collapses whitespace, per-field length caps; `ip` validated against `[a-zA-Z0-9.\-:]` allowlist |

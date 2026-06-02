@@ -750,7 +750,18 @@ async function handleAnalyze(request, env) {
     vtDomainSslIssuer, vtDomainSslExpiry, vtDomainTags,
   } = body;
 
-  if (!ip) return jsonResponse({ error: 'Missing ip field' }, 400, request);
+  if (!ip || typeof ip !== 'string') return jsonResponse({ error: 'Missing ip field' }, 400, request);
+  // Reject ip values that contain characters not valid in an IP address or domain name.
+  // This is the single most important field — it appears first in the prompt.
+  if (!/^[a-zA-Z0-9.\-:]+$/.test(ip)) return jsonResponse({ error: 'Invalid ip field' }, 400, request);
+
+  // Sanitize all user-supplied string fields before prompt interpolation.
+  // Strips newlines/tabs (the primary injection vector — they break prompt structure),
+  // collapses whitespace runs, and caps length so the prompt stays bounded.
+  const safe = (val, max = 120) =>
+    typeof val === 'string'
+      ? val.replace(/[\r\n\t]/g, ' ').replace(/\s{2,}/g, ' ').trim().substring(0, max)
+      : (val ?? '—');
 
   const torFlag   = isTor   ? 'YES — confirmed Tor exit node' : 'No';
   const vpnFlag   = isVpn   ? 'YES' : 'No';
@@ -773,35 +784,35 @@ async function handleAnalyze(request, env) {
     '**Recommendation**\n' +
     '1-2 clear action sentences — what should someone do if they see this IP in their firewall logs, mail server, or web traffic?\n\n' +
     'IP data:\n' +
-    '- IP: ' + ip + (resolvedFrom ? ' (resolved from: ' + resolvedFrom + ')' : '') + '\n' +
-    '- Location: ' + (city||'—') + ', ' + (country||'—') + '\n' +
-    '- ISP: ' + (isp||'—') + ' / Org: ' + (org||'—') + ' / ASN: ' + (asn||'—') + '\n' +
-    '- Reverse DNS: ' + (rdns||'—') + '\n' +
-    '- IP Type: ' + (ipType||'unknown') + ' | Mobile carrier: ' + isMobile + ' | Hosting/DC: ' + isHosting + '\n' +
-    '- Risk score: ' + (riskScore||pcRisk||0) + '/100\n' +
+    '- IP: ' + safe(ip, 45) + (resolvedFrom ? ' (resolved from: ' + safe(resolvedFrom, 253) + ')' : '') + '\n' +
+    '- Location: ' + safe(city) + ', ' + safe(country) + '\n' +
+    '- ISP: ' + safe(isp) + ' / Org: ' + safe(org) + ' / ASN: ' + safe(asn, 40) + '\n' +
+    '- Reverse DNS: ' + safe(rdns) + '\n' +
+    '- IP Type: ' + safe(ipType, 40) + ' | Mobile carrier: ' + !!isMobile + ' | Hosting/DC: ' + !!isHosting + '\n' +
+    '- Risk score: ' + (parseInt(riskScore)||parseInt(pcRisk)||0) + '/100\n' +
     '- VPN detected: ' + vpnFlag + ' | Proxy: ' + proxyFlag + ' | Tor exit node: ' + torFlag + '\n' +
-    '- VirusTotal: ' + (vtMalCount||0) + ' engines flagged this IP as malicious/suspicious out of ' + (vtTotal||0) + ' total\n' +
-    '- Blacklists: listed on ' + (dnsblListed||0) + ' of ' + (dnsblChecked||0) + ' DNSBL blacklists' + ((dnsblNames && dnsblNames !== 'none') ? ' (' + dnsblNames + ')' : '') + '\n' +
-    '- Shodan open ports: ' + (shodanPorts||'none detected') + ' | OS: ' + (shodanOS||'unknown') + '\n' +
-    '- Known CVEs: ' + (shodanVulns||'none') + '\n' +
-    '- WHOIS registrant: ' + (whoisRegistrant||'—') + ' | Abuse contact: ' + (whoisAbuse||'—') + '\n\n' +
+    '- VirusTotal: ' + (parseInt(vtMalCount)||0) + ' engines flagged this IP as malicious/suspicious out of ' + (parseInt(vtTotal)||0) + ' total\n' +
+    '- Blacklists: listed on ' + (parseInt(dnsblListed)||0) + ' of ' + (parseInt(dnsblChecked)||0) + ' DNSBL blacklists' + ((dnsblNames && dnsblNames !== 'none') ? ' (' + safe(dnsblNames, 200) + ')' : '') + '\n' +
+    '- Shodan open ports: ' + safe(shodanPorts, 200) + ' | OS: ' + safe(shodanOS, 60) + '\n' +
+    '- Known CVEs: ' + safe(shodanVulns, 200) + '\n' +
+    '- WHOIS registrant: ' + safe(whoisRegistrant) + ' | Abuse contact: ' + safe(whoisAbuse) + '\n\n' +
     // Append domain section only when scanning a domain
     (isDomain ? (
       '\n\nDomain data (separate from IP):\n' +
-      '- Domain: ' + (resolvedFrom||'—') + '\n' +
-      '- IPv4: ' + (resolvedIpv4||'—') + ' | IPv6: ' + (resolvedIpv6||'—') + '\n' +
-      '- Domain Registrar: ' + (domainRegistrar||'—') + '\n' +
-      '- Domain Registrant: ' + (domainRegistrant||'—') + '\n' +
-      '- Registered: ' + (domainRegistered||'—') + ' | Expires: ' + (domainExpiry||'—') + '\n' +
-      '- Domain Status: ' + (domainStatus||'—') + '\n' +
-      '- Nameservers: ' + (domainNameservers||'—') + '\n' +
-      '- Domain Abuse Email: ' + (domainAbuseEmail||'—') + '\n' +
-      '- VT Domain — Malicious: ' + (vtDomainMalicious||0) + ' | Suspicious: ' + (vtDomainSuspicious||0) + ' | Clean: ' + (vtDomainHarmless||0) + '\n' +
-      '- VT Domain Reputation: ' + (vtDomainReputation !== null && vtDomainReputation !== undefined ? vtDomainReputation : '—') + '\n' +
-      '- VT Domain Categories: ' + (vtDomainCategories||'—') + '\n' +
-      '- VT Domain Registrar: ' + (vtDomainRegistrar||'—') + '\n' +
-      '- SSL Certificate Issuer: ' + (vtDomainSslIssuer||'—') + ' | Expires: ' + (vtDomainSslExpiry||'—') + '\n' +
-      '- Domain Tags: ' + (vtDomainTags||'none') + '\n'
+      '- Domain: ' + safe(resolvedFrom, 253) + '\n' +
+      '- IPv4: ' + safe(resolvedIpv4, 45) + ' | IPv6: ' + safe(resolvedIpv6, 45) + '\n' +
+      '- Domain Registrar: ' + safe(domainRegistrar) + '\n' +
+      '- Domain Registrant: ' + safe(domainRegistrant) + '\n' +
+      '- Registered: ' + safe(domainRegistered, 40) + ' | Expires: ' + safe(domainExpiry, 40) + '\n' +
+      '- Domain Status: ' + safe(domainStatus, 200) + '\n' +
+      '- Nameservers: ' + safe(domainNameservers, 200) + '\n' +
+      '- Domain Abuse Email: ' + safe(domainAbuseEmail) + '\n' +
+      '- VT Domain — Malicious: ' + (parseInt(vtDomainMalicious)||0) + ' | Suspicious: ' + (parseInt(vtDomainSuspicious)||0) + ' | Clean: ' + (parseInt(vtDomainHarmless)||0) + '\n' +
+      '- VT Domain Reputation: ' + (vtDomainReputation !== null && vtDomainReputation !== undefined ? parseInt(vtDomainReputation) : '—') + '\n' +
+      '- VT Domain Categories: ' + safe(vtDomainCategories, 200) + '\n' +
+      '- VT Domain Registrar: ' + safe(vtDomainRegistrar) + '\n' +
+      '- SSL Certificate Issuer: ' + safe(vtDomainSslIssuer) + ' | Expires: ' + safe(vtDomainSslExpiry, 40) + '\n' +
+      '- Domain Tags: ' + safe(vtDomainTags, 200) + '\n'
     ) : '') +
     '\nKeep the total response under 350 words. Be specific — a reader should understand exactly why this IP' + (isDomain?' and domain are':'is') + ' or are not a concern.' +
     (isDomain ? ' When a domain is present, analyse BOTH the domain reputation and the underlying IP separately, then give a combined verdict.' : '');
