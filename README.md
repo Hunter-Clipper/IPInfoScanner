@@ -10,8 +10,6 @@
 **A fast, single-file IP intelligence tool powered by Cloudflare Workers.**  
 Look up any IPv4, IPv6, or domain and get geo, ASN, threat flags, DNSBL, VirusTotal, Shodan, WHOIS, and an AI-powered threat summary — all in one page.
 
-**[https://ipinfo.hunterclipper.com](https://ipinfo.hunterclipper.com)**
-
 </div>
 
 ---
