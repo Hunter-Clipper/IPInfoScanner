@@ -20,15 +20,15 @@ Ranked from most to least severe across both files.
 
 - ~~LOW-01 — Prompt injection in `/analyze` (worker.js)~~ ✅ Fixed
 - ~~LOW-02 — HTTP tried before HTTPS for ip-api.com (worker.js)~~ ✅ Fixed
-- LOW-03 — API keys stored in localStorage (index.html)
-- LOW-04 — No Content Security Policy (index.html)
+- ~~LOW-03 — API keys stored in localStorage (index.html)~~ ✅ Mitigated
+- ~~LOW-04 — No Content Security Policy (index.html)~~ ✅ Fixed
 
 ### Tier 3 — Info *(best-practice hardening, low urgency)*
 
 - ~~INFO-01 — Gemini API key in URL query param (worker.js)~~ ✅ Fixed
 - ~~INFO-02 — Wide-open CORS (worker.js)~~ ✅ Fixed
 - ~~INFO-03 — No X-Frame-Options / clickjacking protection (index.html)~~ ✅ Fixed
-- INFO-04 — External CDN resources loaded without SRI (index.html) *(countryCode validation fixed; fonts remain)*
+- ~~INFO-04 — External CDN resources loaded without SRI (index.html)~~ ✅ Fixed
 
 ---
 
@@ -37,9 +37,9 @@ Ranked from most to least severe across both files.
 | Severity | Total | Open | Fixed | Accepted |
 |---|---|---|---|---|
 | Medium | 2 | 0 | 2 | 0 |
-| Low | 4 | 2 | 2 | 0 |
-| Info | 4 | 1 | 3 | 0 |
-| **Total** | **10** | **3** | **7** | **0** |
+| Low | 4 | 0 | 3 | 1 |
+| Info | 4 | 0 | 4 | 0 |
+| **Total** | **10** | **0** | **9** | **1** |
 
 ---
 
@@ -329,12 +329,12 @@ const flagImg = safeCode
 | MED-02 | Unsanitized innerHTML | `index.html` | Medium | **Fixed** | `esc()` helper; `v()` now escapes; all direct API values wrapped |
 | LOW-01 | Prompt injection | `worker.js` | Low | **Fixed** | `safe()` strips `\r\n\t`, collapses whitespace, caps per-field length; `ip` field validated against allowlist regex |
 | LOW-02 | HTTP before HTTPS | `worker.js` | Low | **Fixed** | HTTPS now tried first |
-| LOW-03 | API keys in localStorage | `index.html` | Low | Open | Depends on MED-02 fix; consider sessionStorage |
-| LOW-04 | No CSP | `index.html` | Low | Open | Add CSP meta tag |
+| LOW-03 | API keys in localStorage | `index.html` | Low | **Mitigated** | XSS vector (MED-02) fixed — localStorage no longer exploitable |
+| LOW-04 | No CSP | `index.html` | Low | **Fixed** | CSP meta tag added; `default-src 'none'` with narrow allowlist |
 | INFO-01 | API key in URL param | `worker.js` | Info | **Fixed** | Moved to `x-goog-api-key` header |
 | INFO-02 | Open CORS | `worker.js` | Info | **Fixed** | Dynamic origin reflection + `isAllowedOrigin` 403 check |
 | INFO-03 | No clickjacking protection | `index.html` | Info | **Fixed** | Added `X-Frame-Options: DENY` meta tag |
-| INFO-04 | No SRI for external CDNs | `index.html` | Info | **Partial** | countryCode validated; fonts still external |
+| INFO-04 | No SRI for external CDNs | `index.html` | Info | **Fixed** | Google Fonts @import removed; system font stack used; countryCode validated |
 
 ---
 
@@ -352,3 +352,6 @@ const flagImg = safeCode
 | 2026-06-02 | Fixed MED-01 — KV-backed rate limiter (30/hr /lookup, 10/hr /analyze); requires RATE_LIMIT_KV binding |
 | 2026-06-02 | Fixed MED-02 — added `esc()` helper; `v()` now HTML-escapes all output; history, basic info, VT engines, Shodan banner updated |
 | 2026-06-02 | Fixed LOW-01 — `safe()` sanitizer strips newlines/tabs, collapses whitespace, per-field length caps; `ip` validated against `[a-zA-Z0-9.\-:]` allowlist |
+| 2026-06-02 | Mitigated LOW-03 — localStorage risk eliminated by MED-02 XSS fix; no code change required |
+| 2026-06-02 | Fixed LOW-04 — CSP meta tag added: `default-src 'none'` with `script-src`, `style-src`, `img-src`, `connect-src` allowlists |
+| 2026-06-02 | Fixed INFO-04 — removed Google Fonts @import; system font stack (`system-ui`, `-apple-system`, etc.) used as fallback; zero external CDN dependencies remain |
