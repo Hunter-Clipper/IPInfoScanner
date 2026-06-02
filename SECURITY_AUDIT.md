@@ -19,16 +19,16 @@ Ranked from most to least severe across both files.
 ### Tier 2 — Low *(fix before production hardening)*
 
 - LOW-01 — Prompt injection in `/analyze` (worker.js)
-- LOW-02 — HTTP tried before HTTPS for ip-api.com (worker.js)
+- ~~LOW-02 — HTTP tried before HTTPS for ip-api.com (worker.js)~~ ✅ Fixed
 - LOW-03 — API keys stored in localStorage (index.html)
 - LOW-04 — No Content Security Policy (index.html)
 
 ### Tier 3 — Info *(best-practice hardening, low urgency)*
 
-- INFO-01 — Gemini API key in URL query param (worker.js)
+- ~~INFO-01 — Gemini API key in URL query param (worker.js)~~ ✅ Fixed
 - ~~INFO-02 — Wide-open CORS (worker.js)~~ ✅ Fixed
-- INFO-03 — No X-Frame-Options / clickjacking protection (index.html)
-- INFO-04 — External CDN resources loaded without SRI (index.html)
+- ~~INFO-03 — No X-Frame-Options / clickjacking protection (index.html)~~ ✅ Fixed
+- INFO-04 — External CDN resources loaded without SRI (index.html) *(countryCode validation fixed; fonts remain)*
 
 ---
 
@@ -37,9 +37,9 @@ Ranked from most to least severe across both files.
 | Severity | Total | Open | Fixed | Accepted |
 |---|---|---|---|---|
 | Medium | 2 | 2 | 0 | 0 |
-| Low | 4 | 4 | 0 | 0 |
-| Info | 4 | 3 | 1 | 0 |
-| **Total** | **10** | **8** | **1** | **0** |
+| Low | 4 | 3 | 1 | 0 |
+| Info | 4 | 1 | 3 | 0 |
+| **Total** | **10** | **6** | **4** | **0** |
 
 ---
 
@@ -328,13 +328,13 @@ const flagImg = safeCode
 | MED-01 | No rate limiting | `worker.js` | Medium | Open | KV counter or CF dashboard rule |
 | MED-02 | Unsanitized innerHTML | `index.html` | Medium | Open | Add `esc()` helper; apply everywhere |
 | LOW-01 | Prompt injection | `worker.js` | Low | Open | Add `safe()` field sanitizer |
-| LOW-02 | HTTP before HTTPS | `worker.js` | Low | Open | Swap URL array order |
+| LOW-02 | HTTP before HTTPS | `worker.js` | Low | **Fixed** | HTTPS now tried first |
 | LOW-03 | API keys in localStorage | `index.html` | Low | Open | Depends on MED-02 fix; consider sessionStorage |
 | LOW-04 | No CSP | `index.html` | Low | Open | Add CSP meta tag |
-| INFO-01 | API key in URL param | `worker.js` | Info | Open | Try `x-goog-api-key` header |
+| INFO-01 | API key in URL param | `worker.js` | Info | **Fixed** | Moved to `x-goog-api-key` header |
 | INFO-02 | Open CORS | `worker.js` | Info | **Fixed** | Dynamic origin reflection + `isAllowedOrigin` 403 check |
-| INFO-03 | No clickjacking protection | `index.html` | Info | Open | Add `frame-ancestors 'none'` to CSP |
-| INFO-04 | No SRI for external CDNs | `index.html` | Info | Open | Self-host fonts; validate countryCode |
+| INFO-03 | No clickjacking protection | `index.html` | Info | **Fixed** | Added `X-Frame-Options: DENY` meta tag |
+| INFO-04 | No SRI for external CDNs | `index.html` | Info | **Partial** | countryCode validated; fonts still external |
 
 ---
 
@@ -345,3 +345,7 @@ const flagImg = safeCode
 | 2026-06-02 | Initial audit of `worker.js` — 5 findings |
 | 2026-06-02 | Added `index.html` audit — 5 new findings; tier list added |
 | 2026-06-02 | Fixed INFO-02 — replaced `*` CORS with dynamic `buildCorsHeaders()` + `isAllowedOrigin()` gate |
+| 2026-06-02 | Fixed LOW-02 — HTTPS now first for ip-api.com |
+| 2026-06-02 | Fixed INFO-01 — Gemini key moved from URL param to `x-goog-api-key` header |
+| 2026-06-02 | Fixed INFO-03 — added `X-Frame-Options: DENY` meta tag |
+| 2026-06-02 | Partial INFO-04 — countryCode validated against `/^[a-z]{2}$/` before flag URL; fonts remain external |

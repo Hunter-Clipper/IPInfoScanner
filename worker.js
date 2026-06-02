@@ -623,8 +623,8 @@ async function fetchIpApi(ip, bust) {
   // ip-api.com blocks some Cloudflare IPs on the free JSON endpoint.
   // Use the pro-fields endpoint with a fallback to the standard one.
   const urls = [
-    `http://ip-api.com/json/${ip}?fields=66846719&_=${bust}`,
     `https://ip-api.com/json/${ip}?fields=66846719&_=${bust}`,
+    `http://ip-api.com/json/${ip}?fields=66846719&_=${bust}`,
   ];
   for (const url of urls) {
     try {
@@ -778,10 +778,10 @@ async function handleAnalyze(request, env) {
 
   try {
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
