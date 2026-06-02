@@ -11,32 +11,24 @@
 
 Ranked from most to least severe across both files.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 1 — Medium  (fix before public launch)                    │
-│                                                                 │
-│  MED-01  No rate limiting on /lookup (worker.js)                │
-│  MED-02  Unsanitized API data injected via innerHTML (HTML)     │
-└─────────────────────────────────────────────────────────────────┘
+### Tier 1 — Medium *(fix before public launch)*
 
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 2 — Low  (fix before production hardening)                │
-│                                                                 │
-│  LOW-01  Prompt injection in /analyze (worker.js)               │
-│  LOW-02  HTTP tried before HTTPS for ip-api.com (worker.js)     │
-│  LOW-03  API keys stored in localStorage (HTML)                 │
-│  LOW-04  No Content Security Policy (HTML)                      │
-└─────────────────────────────────────────────────────────────────┘
+- MED-01 — No rate limiting on `/lookup` (worker.js)
+- MED-02 — Unsanitized API data injected via innerHTML (index.html)
 
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 3 — Info  (best-practice hardening, low urgency)          │
-│                                                                 │
-│  INFO-01  Gemini API key in URL query param (worker.js)         │
-│  INFO-02  Wide-open CORS (worker.js)                            │
-│  INFO-03  No X-Frame-Options / clickjacking protection (HTML)   │
-│  INFO-04  External CDN resources loaded without SRI (HTML)      │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Tier 2 — Low *(fix before production hardening)*
+
+- LOW-01 — Prompt injection in `/analyze` (worker.js)
+- LOW-02 — HTTP tried before HTTPS for ip-api.com (worker.js)
+- LOW-03 — API keys stored in localStorage (index.html)
+- LOW-04 — No Content Security Policy (index.html)
+
+### Tier 3 — Info *(best-practice hardening, low urgency)*
+
+- INFO-01 — Gemini API key in URL query param (worker.js)
+- ~~INFO-02 — Wide-open CORS (worker.js)~~ ✅ Fixed
+- INFO-03 — No X-Frame-Options / clickjacking protection (index.html)
+- INFO-04 — External CDN resources loaded without SRI (index.html)
 
 ---
 
