@@ -1,3 +1,13 @@
+RewriteEngine On
+
+# Redirect .html URLs to clean URLs
+RewriteCond %{THE_REQUEST} \s/+(.+)\.html [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# Serve clean URLs without .html
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.*)$ $1.html [L]
+
 # Security headers
 Header always set X-Frame-Options "DENY"
 Header always set X-Content-Type-Options "nosniff"
