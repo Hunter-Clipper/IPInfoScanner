@@ -1,6 +1,6 @@
-# IP Scanner
-
 <div align="center">
+
+# IP Scanner
 
 ![IP Scanner](https://img.shields.io/badge/IP%20Scanner-v1.0.0-6b79f5?style=for-the-badge&logo=radar&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge)
@@ -10,7 +10,7 @@
 **A fast, single-file IP intelligence tool powered by Cloudflare Workers.**  
 Look up any IPv4, IPv6, or domain and get geo, ASN, threat flags, DNSBL, VirusTotal, Shodan, WHOIS, and an AI-powered threat summary — all in one page.
 
-[**Live Demo →**](https://ipscan.hunter-clipper.workers.dev)
+**[https://ipinfo.hunterclipper.com](https://ipinfo.hunterclipper.com)**
 
 </div>
 
