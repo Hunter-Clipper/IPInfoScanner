@@ -549,8 +549,8 @@ function renderHistory() {
     return `<div class="history-item" onclick="loadFromHistory(${i})">
       <div class="history-item-icon">${icon}</div>
       <div class="history-item-main">
-        <div class="history-item-ip">${e.resolvedFrom ? e.resolvedFrom + ' → ' : ''}${e.ip}</div>
-        <div class="history-item-meta">${e.country || ''} ${e.city || ''} · ${ago}</div>
+        <div class="history-item-ip">${e.resolvedFrom ? esc(e.resolvedFrom) + ' → ' : ''}${esc(e.ip)}</div>
+        <div class="history-item-meta">${esc(e.country || '')} ${esc(e.city || '')} · ${ago}</div>
       </div>
       <div class="history-item-risk" style="color:${riskColor}">${e.riskScore}</div>
       <button class="history-item-del" onclick="deleteHistory(event,${i})" title="Remove">✕</button>
@@ -627,7 +627,8 @@ document.querySelectorAll('.eye-btn').forEach(btn => {
 // ── Helpers ────────────────────────────────────────────────────────────────
 function setStatus(msg, type='') { $('sdot').className='status-dot '+type; $('stext').textContent=msg; }
 function setLoading(on) { $('lookup-btn').disabled=$('my-ip-btn').disabled=on; $('lookup-btn').classList.toggle('btn-loading',on); }
-function v(x,fb='—') { return (x===null||x===undefined||x===''||x==='null'||x===false)?fb:String(x); }
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function v(x,fb='—') { return (x===null||x===undefined||x===''||x==='null'||x===false)?fb:esc(String(x)); }
 function kv(k,val,cls='') { return `<div class="kv"><span class="kv-key">${k}</span><span class="kv-val ${cls}">${val}</span></div>`; }
 function cardHead(icon,title) { return `<div class="card-header"><span>${icon}</span>${title}</div>`; }
 function tag(txt,col='gray') { return `<span class="tag tag-${col}">${txt}</span>`; }
@@ -827,10 +828,10 @@ async function lookup(ip) {
 
     // Basic info
     $('c-basic').innerHTML = cardHead('🌐','Basic Info') + [
-      resolvedFrom ? kv('Domain', `<span style="color:var(--accent);font-weight:600">${resolvedFrom}</span>`) : '',
-      kv('IP Address', `<span style="color:var(--accent);font-weight:600">${resolvedIp}</span>`),
-      resolvedIpv4 && resolvedIpv6 ? kv('IPv4', `<span style="color:var(--accent)">${resolvedIpv4}</span>`) : '',
-      resolvedIpv4 && resolvedIpv6 ? kv('IPv6', `<span style="color:var(--accent)">${resolvedIpv6}</span>`) : '',
+      resolvedFrom ? kv('Domain', `<span style="color:var(--accent);font-weight:600">${esc(resolvedFrom)}</span>`) : '',
+      kv('IP Address', `<span style="color:var(--accent);font-weight:600">${esc(resolvedIp)}</span>`),
+      resolvedIpv4 && resolvedIpv6 ? kv('IPv4', `<span style="color:var(--accent)">${esc(resolvedIpv4)}</span>`) : '',
+      resolvedIpv4 && resolvedIpv6 ? kv('IPv6', `<span style="color:var(--accent)">${esc(resolvedIpv6)}</span>`) : '',
       resolvedFrom ? kv('DNS Resolved', tag('Yes','green')) : '',
       kv('Version', ipVer),
       kv('Reverse DNS', rdns),
@@ -984,8 +985,8 @@ function renderShodanCard(shodan) {
     `<div class="shodan-svc">
       <div class="shodan-port">${s.port}/${s.transport||'tcp'}</div>
       <div class="shodan-info">
-        <div class="product">${v(s.product,'Unknown service')}${s.version?' '+s.version:''}</div>
-        ${s.banner?`<div class="banner">${s.banner.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`:''}
+        <div class="product">${v(s.product,'Unknown service')}${s.version?' '+esc(s.version):''}</div>
+        ${s.banner?`<div class="banner">${esc(s.banner)}</div>`:''}
       </div>
     </div>`
   ).join('');
@@ -1072,7 +1073,7 @@ function renderVtCard(vtData, ip) {
   const clean    = entries.filter(([,r])=>r.category==='undetected'||r.category==='harmless').slice(0,8);
   const eng = ([name,res]) => {
     const bad = res.category==='malicious'||res.category==='suspicious';
-    return `<div class="vt-engine ${bad?'malicious':'clean'}"><div class="vt-engine-dot"></div><span class="vt-engine-name">${name}</span><span class="vt-engine-result">${res.result||res.category}</span></div>`;
+    return `<div class="vt-engine ${bad?'malicious':'clean'}"><div class="vt-engine-dot"></div><span class="vt-engine-name">${esc(name)}</span><span class="vt-engine-result">${esc(res.result||res.category)}</span></div>`;
   };
   card.innerHTML = cardHead('🦠',`VirusTotal — ${total} engines`) + `
     <div class="vt-summary-row">

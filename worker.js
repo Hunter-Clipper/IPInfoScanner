@@ -53,6 +53,27 @@ function isAllowedOrigin(request) {
   );
 }
 
+// ── Rate limiting (KV-backed) ──────────────────────────────────────────────
+// Requires a KV namespace bound to the worker as RATE_LIMIT_KV.
+// Setup: CF Dashboard → Workers & Pages → your worker →
+//        Settings → Bindings → Add KV Namespace → Variable: RATE_LIMIT_KV
+const RATE_LIMIT_WINDOW  = 3600; // sliding window in seconds (1 hour)
+const RATE_LIMIT_LOOKUP  = 30;   // max /lookup requests per IP per hour
+const RATE_LIMIT_ANALYZE = 10;   // max /analyze requests per IP per hour
+
+async function checkRateLimit(ip, kv, limit, endpoint) {
+  // Fail open if KV namespace is not yet bound — never block legitimate traffic
+  // due to a missing binding during initial deployment.
+  if (!kv) return true;
+  const key = `rl:${endpoint}:${ip}`;
+  try {
+    const count = parseInt(await kv.get(key) || '0');
+    if (count >= limit) return false;
+    await kv.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW });
+    return true;
+  } catch { return true; } // fail open on KV errors
+}
+
 // ── Tor exit node list cache (30 min TTL) ─────────────────────────────────
 let torListCache    = null;
 let torListFetchedAt = 0;
@@ -120,12 +141,21 @@ export default {
     if (!isAllowedOrigin(request)) {
       return jsonResponse({ error: 'Forbidden' }, 403, request);
     }
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
     const url  = new URL(request.url);
     const path = url.pathname;
     try {
+      if (path === '/lookup') {
+        if (!await checkRateLimit(clientIp, env.RATE_LIMIT_KV, RATE_LIMIT_LOOKUP, 'lookup'))
+          return jsonResponse({ error: 'Rate limit exceeded — max 30 scans per hour.' }, 429, request);
+        return handleLookup(request, url, env);
+      }
+      if (path === '/analyze') {
+        if (!await checkRateLimit(clientIp, env.RATE_LIMIT_KV, RATE_LIMIT_ANALYZE, 'analyze'))
+          return jsonResponse({ error: 'Rate limit exceeded — max 10 AI analyses per hour.' }, 429, request);
+        return handleAnalyze(request, env);
+      }
       if (path === '/myip')    return handleMyIp(request);
-      if (path === '/lookup')  return handleLookup(request, url, env);
-      if (path === '/analyze') return handleAnalyze(request, env);
       return jsonResponse({ error: 'Not found' }, 404, request);
     } catch (e) {
       return jsonResponse({ error: 'Worker error', message: e.message }, 500, request);

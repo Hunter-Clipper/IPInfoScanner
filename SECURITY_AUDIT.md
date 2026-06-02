@@ -13,8 +13,8 @@ Ranked from most to least severe across both files.
 
 ### Tier 1 — Medium *(fix before public launch)*
 
-- MED-01 — No rate limiting on `/lookup` (worker.js)
-- MED-02 — Unsanitized API data injected via innerHTML (index.html)
+- ~~MED-01 — No rate limiting on `/lookup` (worker.js)~~ ✅ Fixed
+- ~~MED-02 — Unsanitized API data injected via innerHTML (index.html)~~ ✅ Fixed
 
 ### Tier 2 — Low *(fix before production hardening)*
 
@@ -36,10 +36,10 @@ Ranked from most to least severe across both files.
 
 | Severity | Total | Open | Fixed | Accepted |
 |---|---|---|---|---|
-| Medium | 2 | 2 | 0 | 0 |
+| Medium | 2 | 0 | 2 | 0 |
 | Low | 4 | 3 | 1 | 0 |
 | Info | 4 | 1 | 3 | 0 |
-| **Total** | **10** | **6** | **4** | **0** |
+| **Total** | **10** | **4** | **6** | **0** |
 
 ---
 
@@ -325,8 +325,8 @@ const flagImg = safeCode
 
 | ID | Finding | File | Severity | Status | Notes |
 |---|---|---|---|---|---|
-| MED-01 | No rate limiting | `worker.js` | Medium | Open | KV counter or CF dashboard rule |
-| MED-02 | Unsanitized innerHTML | `index.html` | Medium | Open | Add `esc()` helper; apply everywhere |
+| MED-01 | No rate limiting | `worker.js` | Medium | **Fixed** | KV-backed `checkRateLimit()` — 30/hr lookup, 10/hr analyze |
+| MED-02 | Unsanitized innerHTML | `index.html` | Medium | **Fixed** | `esc()` helper; `v()` now escapes; all direct API values wrapped |
 | LOW-01 | Prompt injection | `worker.js` | Low | Open | Add `safe()` field sanitizer |
 | LOW-02 | HTTP before HTTPS | `worker.js` | Low | **Fixed** | HTTPS now tried first |
 | LOW-03 | API keys in localStorage | `index.html` | Low | Open | Depends on MED-02 fix; consider sessionStorage |
@@ -349,3 +349,5 @@ const flagImg = safeCode
 | 2026-06-02 | Fixed INFO-01 — Gemini key moved from URL param to `x-goog-api-key` header |
 | 2026-06-02 | Fixed INFO-03 — added `X-Frame-Options: DENY` meta tag |
 | 2026-06-02 | Partial INFO-04 — countryCode validated against `/^[a-z]{2}$/` before flag URL; fonts remain external |
+| 2026-06-02 | Fixed MED-01 — KV-backed rate limiter (30/hr /lookup, 10/hr /analyze); requires RATE_LIMIT_KV binding |
+| 2026-06-02 | Fixed MED-02 — added `esc()` helper; `v()` now HTML-escapes all output; history, basic info, VT engines, Shodan banner updated |
