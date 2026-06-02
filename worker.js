@@ -19,12 +19,39 @@
  * Client headers take priority over worker secrets — users can supply their own keys.
  */
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': '*',
-  'Content-Type': 'application/json',
-};
+const ALLOWED_ORIGIN = 'https://ipinfo.hunterclipper.com';
+
+// Reflect the exact requesting origin back if it belongs to hunterclipper.com,
+// otherwise fall back to the primary domain. This lets any subdomain call the
+// worker from a browser without needing to enumerate them all here.
+function buildCorsHeaders(request) {
+  const origin = request?.headers?.get('Origin') || '';
+  const allowed =
+    origin === 'https://hunterclipper.com' ||
+    origin.endsWith('.hunterclipper.com')
+      ? origin
+      : ALLOWED_ORIGIN;
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': '*',
+    'Content-Type': 'application/json',
+    'Vary': 'Origin',
+  };
+}
+
+// Returns true if the request originates from hunterclipper.com or any subdomain.
+// Origin/Referer headers are spoofable via curl/Postman but stop casual abuse.
+function isAllowedOrigin(request) {
+  const origin  = request.headers.get('Origin')  || '';
+  const referer = request.headers.get('Referer') || '';
+  return (
+    origin  === 'https://hunterclipper.com'    ||
+    origin.endsWith('.hunterclipper.com')       ||
+    referer.startsWith('https://hunterclipper.com') ||
+    referer.includes('.hunterclipper.com')
+  );
+}
 
 // ── Tor exit node list cache (30 min TTL) ─────────────────────────────────
 let torListCache    = null;
@@ -88,7 +115,10 @@ const DNSBL_LISTS = [
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: buildCorsHeaders(request) });
+    }
+    if (!isAllowedOrigin(request)) {
+      return jsonResponse({ error: 'Forbidden' }, 403, request);
     }
     const url  = new URL(request.url);
     const path = url.pathname;
@@ -96,9 +126,9 @@ export default {
       if (path === '/myip')    return handleMyIp(request);
       if (path === '/lookup')  return handleLookup(request, url, env);
       if (path === '/analyze') return handleAnalyze(request, env);
-      return jsonResponse({ error: 'Not found' }, 404);
+      return jsonResponse({ error: 'Not found' }, 404, request);
     } catch (e) {
-      return jsonResponse({ error: 'Worker error', message: e.message }, 500);
+      return jsonResponse({ error: 'Worker error', message: e.message }, 500, request);
     }
   }
 };
@@ -112,13 +142,13 @@ function handleMyIp(request) {
   // Also return the Cloudflare colo so the frontend knows where the worker is
   const colo   = request.cf?.colo   || 'Unknown';
   const country= request.cf?.country || 'Unknown';
-  return jsonResponse({ ip, workerColo: colo, workerCountry: country });
+  return jsonResponse({ ip, workerColo: colo, workerCountry: country }, 200, request);
 }
 
 // ── /lookup ────────────────────────────────────────────────────────────────
 async function handleLookup(request, url, env = {}) {
   const input = (url.searchParams.get('ip') || request.headers.get('X-IP') || '').trim();
-  if (!input) return jsonResponse({ error: 'Missing IP or domain' }, 400);
+  if (!input) return jsonResponse({ error: 'Missing IP or domain' }, 400, request);
 
   let ip = input;
   let resolvedFrom  = null;
@@ -133,7 +163,7 @@ async function handleLookup(request, url, env = {}) {
       resolveDomain(input, 'A'),
       resolveDomain(input, 'AAAA'),
     ]);
-    if (!v4 && !v6) return jsonResponse({ error: `Could not resolve domain: ${input}` }, 400);
+    if (!v4 && !v6) return jsonResponse({ error: `Could not resolve domain: ${input}` }, 400, request);
     resolvedFrom = input;
     resolvedIpv4 = v4 || null;
     resolvedIpv6 = v6 || null;
@@ -200,7 +230,7 @@ async function handleLookup(request, url, env = {}) {
     workerColo,
     workerCountry,
     sources: { ipapi, ipinfo, proxycheck, virustotal, ipapis, whois, shodan, dnsbl, vtDomain, domainWhois }
-  });
+  }, 200, request);
 }
 
 // ── WHOIS ──────────────────────────────────────────────────────────────────
@@ -660,14 +690,14 @@ async function handleAnalyze(request, env) {
   // Key lives in encrypted Worker secret — never touches the browser
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
-    return jsonResponse({ error: 'AI analysis not configured — GEMINI_API_KEY secret not set in worker.' }, 503);
+    return jsonResponse({ error: 'AI analysis not configured — GEMINI_API_KEY secret not set in worker.' }, 503, request);
   }
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+    return jsonResponse({ error: 'Invalid JSON body' }, 400, request);
   }
 
   // Accept a pre-summarised payload from the frontend (not the full raw sources)
@@ -690,7 +720,7 @@ async function handleAnalyze(request, env) {
     vtDomainSslIssuer, vtDomainSslExpiry, vtDomainTags,
   } = body;
 
-  if (!ip) return jsonResponse({ error: 'Missing ip field' }, 400);
+  if (!ip) return jsonResponse({ error: 'Missing ip field' }, 400, request);
 
   const torFlag   = isTor   ? 'YES — confirmed Tor exit node' : 'No';
   const vpnFlag   = isVpn   ? 'YES' : 'No';
@@ -773,33 +803,33 @@ async function handleAnalyze(request, env) {
       const errCode = err?.error?.code || err?.error?.status || '';
 
       if (geminiRes.status === 401 || errCode === 'UNAUTHENTICATED') {
-        return jsonResponse({ error: 'Invalid API key — check that GEMINI_API_KEY secret is correct in your worker settings.', detail: errMsg }, 401);
+        return jsonResponse({ error: 'Invalid API key — check that GEMINI_API_KEY secret is correct in your worker settings.', detail: errMsg }, 401, request);
       }
       if (geminiRes.status === 403 || errCode === 'PERMISSION_DENIED') {
-        return jsonResponse({ error: 'API key does not have permission. Make sure the Gemini API is enabled in your Google Cloud project.', detail: errMsg }, 403);
+        return jsonResponse({ error: 'API key does not have permission. Make sure the Gemini API is enabled in your Google Cloud project.', detail: errMsg }, 403, request);
       }
       if (geminiRes.status === 429 || errCode === 'RESOURCE_EXHAUSTED') {
-        return jsonResponse({ error: 'Rate limit hit — free tier allows 15 requests/minute and 1,500/day. Wait 60 seconds and try again.', detail: errMsg }, 429);
+        return jsonResponse({ error: 'Rate limit hit — free tier allows 15 requests/minute and 1,500/day. Wait 60 seconds and try again.', detail: errMsg }, 429, request);
       }
       if (geminiRes.status === 400) {
-        return jsonResponse({ error: 'Bad request — API key may be invalid or request malformed.', detail: errMsg }, 400);
+        return jsonResponse({ error: 'Bad request — API key may be invalid or request malformed.', detail: errMsg }, 400, request);
       }
-      return jsonResponse({ error: 'Gemini API error ' + geminiRes.status, detail: errMsg }, 502);
+      return jsonResponse({ error: 'Gemini API error ' + geminiRes.status, detail: errMsg }, 502, request);
     }
 
     const data = await geminiRes.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return jsonResponse({ error: 'Gemini returned empty response.' }, 502);
+    if (!text) return jsonResponse({ error: 'Gemini returned empty response.' }, 502, request);
 
-    return jsonResponse({ analysis: text, model: 'gemini-3.1-flash-lite' });
+    return jsonResponse({ analysis: text, model: 'gemini-3.1-flash-lite' }, 200, request);
 
   } catch (e) {
-    return jsonResponse({ error: 'Failed to reach Gemini API', message: e.message }, 502);
+    return jsonResponse({ error: 'Failed to reach Gemini API', message: e.message }, 502, request);
   }
 }
 
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: CORS_HEADERS });
+function jsonResponse(data, status = 200, request = null) {
+  return new Response(JSON.stringify(data), { status, headers: buildCorsHeaders(request) });
 }
 
 function isValidIp(ip) {

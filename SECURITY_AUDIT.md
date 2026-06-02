@@ -46,8 +46,8 @@ Ranked from most to least severe across both files.
 |---|---|---|---|---|
 | Medium | 2 | 2 | 0 | 0 |
 | Low | 4 | 4 | 0 | 0 |
-| Info | 4 | 3 | 0 | 1 |
-| **Total** | **10** | **9** | **0** | **1** |
+| Info | 4 | 3 | 1 | 0 |
+| **Total** | **10** | **8** | **1** | **0** |
 
 ---
 
@@ -167,15 +167,13 @@ headers: {
 ### [INFO-02] Wide-Open CORS (`Access-Control-Allow-Origin: *`)
 
 **Severity:** Info  
-**Status:** Accepted  
-**File:** `worker.js` — `CORS_HEADERS`
+**Status:** Fixed  
+**File:** `worker.js` — `buildCorsHeaders()`
 
 **Description:**  
-All responses set `Access-Control-Allow-Origin: *`. This is intentional for a public, unauthenticated tool — any website can call the worker from a visitor's browser. There is no session state or cookies so this carries no current risk.
+Previously all responses returned `Access-Control-Allow-Origin: *`. Fixed by replacing the static `CORS_HEADERS` constant with a dynamic `buildCorsHeaders(request)` function that reflects the requesting origin if it belongs to `hunterclipper.com` or any of its subdomains, and falls back to `https://ipinfo.hunterclipper.com` for all other origins.
 
-**Future risk:** If authentication is ever added, CORS must be tightened to specific origins before deploying.
-
-**No action required now.** Revisit if auth is introduced.
+An `isAllowedOrigin(request)` check was also added to the router, returning HTTP 403 for any request whose `Origin` or `Referer` header does not include `hunterclipper.com`. A `Vary: Origin` header is now included on all responses so CDN/proxy caches handle the dynamic origin correctly.
 
 ---
 
@@ -342,7 +340,7 @@ const flagImg = safeCode
 | LOW-03 | API keys in localStorage | `index.html` | Low | Open | Depends on MED-02 fix; consider sessionStorage |
 | LOW-04 | No CSP | `index.html` | Low | Open | Add CSP meta tag |
 | INFO-01 | API key in URL param | `worker.js` | Info | Open | Try `x-goog-api-key` header |
-| INFO-02 | Open CORS | `worker.js` | Info | Accepted | Intentional; revisit if auth added |
+| INFO-02 | Open CORS | `worker.js` | Info | **Fixed** | Dynamic origin reflection + `isAllowedOrigin` 403 check |
 | INFO-03 | No clickjacking protection | `index.html` | Info | Open | Add `frame-ancestors 'none'` to CSP |
 | INFO-04 | No SRI for external CDNs | `index.html` | Info | Open | Self-host fonts; validate countryCode |
 
@@ -354,3 +352,4 @@ const flagImg = safeCode
 |---|---|
 | 2026-06-02 | Initial audit of `worker.js` — 5 findings |
 | 2026-06-02 | Added `index.html` audit — 5 new findings; tier list added |
+| 2026-06-02 | Fixed INFO-02 — replaced `*` CORS with dynamic `buildCorsHeaders()` + `isAllowedOrigin()` gate |
