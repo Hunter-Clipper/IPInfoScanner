@@ -84,9 +84,6 @@ The worker fans out all source requests in parallel and returns a single aggrega
 
 ## Usage
 
-### Online
-Visit the live instance at **[https://ipscan.hunter-clipper.workers.dev](https://ipscan.hunter-clipper.workers.dev)**.
-
 ### Self-Hosted (static)
 The entire frontend is a single file:
 
