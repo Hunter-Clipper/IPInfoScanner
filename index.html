@@ -40,6 +40,20 @@ body{font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',s
 .theme-btn.active{background:var(--accent);color:#fff}
 .theme-btn:not(.active):hover{background:var(--bg-hover)}
 
+/* Hamburger menu (mobile) */
+.hamburger-wrap{position:relative;display:none}
+.hamburger-btn{background:var(--bg-card);border:1px solid var(--border-med);border-radius:50px;width:42px;height:42px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.1rem;color:var(--text-muted);box-shadow:var(--shadow);transition:all .15s}
+.hamburger-btn:hover{border-color:var(--accent);color:var(--accent)}
+.top-menu{display:none;position:absolute;top:calc(100% + 8px);right:0;background:var(--bg-modal);border:1px solid var(--border-med);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);overflow:hidden;min-width:170px;z-index:300}
+.top-menu.open{display:block}
+.top-menu-item{display:flex;align-items:center;gap:10px;padding:.75rem 1rem;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:500;color:var(--text-muted);cursor:pointer;transition:background .15s,color .15s;border:none;background:none;width:100%;text-align:left}
+.top-menu-item:hover{background:var(--bg-hover);color:var(--text-h)}
+.top-menu-item+.top-menu-item{border-top:1px solid var(--border)}
+@media(max-width:600px){
+  .history-btn,.settings-btn,.help-btn{display:none}
+  .hamburger-wrap{display:block}
+}
+
 /* History button */
 .history-btn{background:var(--bg-card);border:1px solid var(--border-med);border-radius:50px;padding:0 14px;height:42px;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;color:var(--text-muted);box-shadow:var(--shadow);transition:all .15s}
 .history-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -317,6 +331,14 @@ h1 em{font-style:normal;color:var(--accent)}
   <button class="history-btn" id="history-btn">🕐 History <span class="history-badge" id="history-badge">0</span></button>
   <button class="settings-btn" id="settings-btn">⚙ Settings</button>
   <button class="help-btn" id="help-btn">? Help</button>
+  <div class="hamburger-wrap" id="hamburger-wrap">
+    <button class="hamburger-btn" id="hamburger-btn">☰</button>
+    <div class="top-menu" id="top-menu">
+      <button class="top-menu-item" id="menu-history">🕐 History</button>
+      <button class="top-menu-item" id="menu-settings">⚙ Settings</button>
+      <button class="top-menu-item" id="menu-help">? Help</button>
+    </div>
+  </div>
   <div class="theme-toggle">
     <button class="theme-btn active" id="btn-dark"  title="Dark">🌙</button>
     <button class="theme-btn"        id="btn-light" title="Light">☀️</button>
@@ -697,6 +719,13 @@ function closeHelp() { $('help-overlay').classList.remove('open'); $('help-panel
 $('help-btn').addEventListener('click', openHelp);
 $('help-close').addEventListener('click', closeHelp);
 $('help-overlay').addEventListener('click', closeHelp);
+
+function closeTopMenu() { $('top-menu').classList.remove('open'); }
+$('hamburger-btn').addEventListener('click', e => { e.stopPropagation(); $('top-menu').classList.toggle('open'); });
+document.addEventListener('click', e => { if (!$('hamburger-wrap').contains(e.target)) closeTopMenu(); });
+$('menu-history').addEventListener('click', () => { closeTopMenu(); openHistory(); });
+$('menu-settings').addEventListener('click', () => { closeTopMenu(); openModal(); });
+$('menu-help').addEventListener('click', () => { closeTopMenu(); openHelp(); });
 $('history-clear').addEventListener('click', () => { saveHistory([]); renderHistory(); });
 
 // ── Modal ──────────────────────────────────────────────────────────────────
