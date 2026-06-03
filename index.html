@@ -99,17 +99,9 @@ h1 em{font-style:normal;color:var(--accent)}
 .share-copy:hover{background:var(--accent-hover)}
 .share-copy.copied{background:var(--green)}
 
-/* Keys bar */
-.keys-bar{display:flex;align-items:center;gap:6px;margin-bottom:1.25rem;padding:9px 12px;border-radius:10px;background:var(--bg-card);border:1px solid var(--border);box-shadow:var(--shadow);flex-wrap:wrap;transition:background .25s}
-.keys-label{font-size:.72rem;color:var(--text-faint);font-weight:500;white-space:nowrap;margin-right:2px}
-.key-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:.7rem;font-weight:500;cursor:pointer;border:1px solid;transition:all .15s;white-space:nowrap;background:none}
-.key-pill.unset{border-color:var(--border-med);color:var(--text-muted)}
-.key-pill.unset:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
-.key-pill.set{border-color:var(--green-border);color:var(--green);background:var(--green-dim)}
-.key-pill.set:hover{border-color:var(--red-border);color:var(--red);background:var(--red-dim)}
-.key-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;background:currentColor;opacity:.7}
-.manage-btn{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:.7rem;font-weight:600;cursor:pointer;border:1px solid var(--accent-border);color:var(--accent);background:var(--accent-dim);transition:all .15s}
-.manage-btn:hover{background:var(--accent);color:#fff}
+/* Settings button */
+.settings-btn{background:var(--bg-card);border:1px solid var(--border-med);border-radius:50px;padding:0 14px;height:42px;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;color:var(--text-muted);box-shadow:var(--shadow);transition:all .15s}
+.settings-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 /* Modal */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)}
@@ -285,9 +277,6 @@ h1 em{font-style:normal;color:var(--accent)}
 .raw-toggle:hover{color:var(--accent)}
 #raw-box{display:none;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-top:.5rem;font-family:'JetBrains Mono',monospace;font-size:.67rem;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto}
 
-/* API key hint */
-.key-hint{font-size:.75rem;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;line-height:1.5}
-.key-hint strong{color:var(--text-h);font-weight:600}
 </style>
 </head>
 <body>
@@ -296,6 +285,7 @@ h1 em{font-style:normal;color:var(--accent)}
 <!-- Top controls -->
 <div class="top-controls">
   <button class="history-btn" id="history-btn">🕐 History <span class="history-badge" id="history-badge">0</span></button>
+  <button class="settings-btn" id="settings-btn">⚙ Settings</button>
   <div class="theme-toggle">
     <button class="theme-btn active" id="btn-dark"  title="Dark">🌙</button>
     <button class="theme-btn"        id="btn-light" title="Light">☀️</button>
@@ -368,19 +358,6 @@ h1 em{font-style:normal;color:var(--accent)}
     <span style="font-size:.68rem;color:var(--text-muted);flex-shrink:0">🔗 Share:</span>
     <span class="share-url" id="share-url"></span>
     <button class="share-copy" id="share-copy">Copy</button>
-  </div>
-
-  <div class="keys-bar">
-    <span class="keys-label">API keys <span style="font-size:.6rem;opacity:.6">(optional override)</span>:</span>
-    <button class="key-pill" id="pill-vt">        <div class="key-dot"></div>VirusTotal</button>
-    <button class="key-pill" id="pill-shodan">    <div class="key-dot"></div>Shodan</button>
-    <button class="key-pill" id="pill-ipinfo">    <div class="key-dot"></div>ipinfo.io</button>
-    <button class="key-pill" id="pill-proxycheck"><div class="key-dot"></div>Proxycheck</button>
-    <button class="manage-btn" id="manage-keys-btn">⚙ Manage</button>
-  </div>
-
-  <div id="key-hint" class="key-hint">
-    💡 All scanning features are <strong>pre-configured</strong> and work out of the box. Click <strong>⚙ Manage</strong> to optionally override with your own API keys for personal quota.
   </div>
 
   <div class="status-bar">
@@ -509,15 +486,7 @@ $('btn-light').addEventListener('click', () => applyTheme('light'));
 function getKey(n)      { try { return localStorage.getItem(STORAGE_KEYS[n]) || ''; } catch { return ''; } }
 function setKey(n, val) { try { val ? localStorage.setItem(STORAGE_KEYS[n], val) : localStorage.removeItem(STORAGE_KEYS[n]); } catch {} }
 
-function refreshPills() {
-  ['vt','shodan','ipinfo','proxycheck'].forEach(n => {
-    const p = $('pill-' + n);
-    if (p) p.className = 'key-pill ' + (getKey(n) ? 'set' : 'unset');
-  });
-  // Hide the hint once both primary keys (VT + Shodan) are set
-  const hint = $('key-hint');
-  if (hint) hint.style.display = (getKey('vt') && getKey('shodan')) ? 'none' : '';
-}
+function refreshPills() {}
 
 // ── Scan History ───────────────────────────────────────────────────────────
 function getHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
@@ -607,8 +576,7 @@ function openModal() {
   setTimeout(() => $('k-vt').focus(), 50);
 }
 function closeModal() { $('modal-overlay').classList.remove('open'); }
-$('manage-keys-btn').addEventListener('click', openModal);
-['pill-vt','pill-shodan','pill-ipinfo','pill-proxycheck'].forEach(id => { const el = $(id); if(el) el.addEventListener('click', openModal); });
+$('settings-btn').addEventListener('click', openModal);
 $('modal-cancel').addEventListener('click', closeModal);
 $('modal-overlay').addEventListener('click', e => { if (e.target === $('modal-overlay')) closeModal(); });
 $('modal-save').addEventListener('click', () => {
