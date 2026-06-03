@@ -103,6 +103,29 @@ h1 em{font-style:normal;color:var(--accent)}
 .settings-btn{background:var(--bg-card);border:1px solid var(--border-med);border-radius:50px;padding:0 14px;height:42px;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;color:var(--text-muted);box-shadow:var(--shadow);transition:all .15s}
 .settings-btn:hover{border-color:var(--accent);color:var(--accent)}
 
+/* Help button */
+.help-btn{background:var(--bg-card);border:1px solid var(--border-med);border-radius:50px;padding:0 14px;height:42px;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;color:var(--text-muted);box-shadow:var(--shadow);transition:all .15s}
+.help-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── Help panel ── */
+.help-overlay{display:none;position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)}
+.help-overlay.open{display:block}
+.help-panel{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:100vw;background:var(--bg-modal);border-left:1px solid var(--border-med);z-index:251;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.3);transform:translateX(100%);transition:transform .25s ease;overflow:hidden}
+.help-panel.open{transform:translateX(0)}
+.help-header{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1.25rem 1rem;border-bottom:1px solid var(--border)}
+.help-title{font-size:.95rem;font-weight:600;color:var(--text-h)}
+.help-close{background:none;border:none;color:var(--text-faint);font-size:18px;cursor:pointer;line-height:1;padding:2px}
+.help-close:hover{color:var(--text-h)}
+.help-body{flex:1;overflow-y:auto;padding:1rem 1.25rem}
+.help-section{margin-bottom:1.5rem}
+.help-section-title{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:.6rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)}
+.help-item{margin-bottom:.75rem}
+.help-item-label{font-size:.8rem;font-weight:600;color:var(--text-h);margin-bottom:.2rem}
+.help-item-desc{font-size:.75rem;color:var(--text-muted);line-height:1.55}
+.help-tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:.68rem;background:var(--bg-hover);border:1px solid var(--border-med);border-radius:4px;padding:1px 5px;color:var(--text-h);white-space:nowrap}
+.help-tip{background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:8px;padding:.6rem .8rem;font-size:.74rem;color:var(--text-muted);line-height:1.5;margin-top:.5rem}
+.help-tip strong{color:var(--accent)}
+
 /* Modal */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)}
 .modal-overlay.open{display:flex}
@@ -286,6 +309,7 @@ h1 em{font-style:normal;color:var(--accent)}
 <div class="top-controls">
   <button class="history-btn" id="history-btn">🕐 History <span class="history-badge" id="history-badge">0</span></button>
   <button class="settings-btn" id="settings-btn">⚙ Settings</button>
+  <button class="help-btn" id="help-btn">? Help</button>
   <div class="theme-toggle">
     <button class="theme-btn active" id="btn-dark"  title="Dark">🌙</button>
     <button class="theme-btn"        id="btn-light" title="Light">☀️</button>
@@ -303,6 +327,98 @@ h1 em{font-style:normal;color:var(--accent)}
     </div>
   </div>
   <div class="history-list" id="history-list"></div>
+</div>
+
+<!-- Help panel -->
+<div class="help-overlay" id="help-overlay"></div>
+<div class="help-panel" id="help-panel">
+  <div class="help-header">
+    <div class="help-title">Quick Guide</div>
+    <button class="help-close" id="help-close">✕</button>
+  </div>
+  <div class="help-body">
+
+    <div class="help-section">
+      <div class="help-section-title">Getting Started</div>
+      <div class="help-item">
+        <div class="help-item-label">Scan an IP or Domain</div>
+        <div class="help-item-desc">Type any <span class="help-tag">IPv4</span>, <span class="help-tag">IPv6</span>, or <span class="help-tag">domain name</span> into the search bar and click <strong>Scan ↗</strong> or press <strong>Enter</strong>. Results load in a few seconds.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Check Your Own IP</div>
+        <div class="help-item-desc">Click <strong>My IP</strong> to auto-fill and scan your current public IP address.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Share a Result</div>
+        <div class="help-item-desc">After a scan, a <strong>Share</strong> bar appears with a direct link. Hit <strong>Copy</strong> to grab it — anyone opening the link will land straight on that result.</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Result Sections</div>
+      <div class="help-item">
+        <div class="help-item-label">Identification &amp; Geo</div>
+        <div class="help-item-desc">Country, city, timezone, coordinates, hostname, and whether the address is IPv4 or IPv6. Dual-stack lookups show both addresses.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Network (ASN)</div>
+        <div class="help-item-desc">The ISP or hosting provider, Autonomous System Number, and the registered CIDR range the IP belongs to. Hosting/datacenter IPs will show the cloud provider here.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Privacy &amp; Threat Flags</div>
+        <div class="help-item-desc">Quick-read badges for VPN, proxy, Tor exit node, relay, datacenter, mobile, and crawler detection. Each flag is sourced from multiple providers and weighted into the overall risk score.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">WHOIS / RDAP</div>
+        <div class="help-item-desc">Registration details for the IP block — registrar, org name, country, and abuse contact email pulled from regional internet registries.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Shodan</div>
+        <div class="help-item-desc">Open ports and running services detected by Shodan's internet-wide scans. Shows service banners and version strings where available — useful for spotting exposed infrastructure.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Blacklist / DNSBL</div>
+        <div class="help-item-desc">Checks the IP against dozens of DNS-based blocklists used by mail servers and firewalls. A hit here means the IP has a spam or abuse history.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">VirusTotal</div>
+        <div class="help-item-desc">Aggregated malware and threat engine verdicts from VirusTotal's 90+ security vendors. Shows the detection ratio and individual engine results.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Domain Intelligence</div>
+        <div class="help-item-desc">Appears only when scanning a domain. Shows domain WHOIS registration data and VirusTotal URL/domain scan results alongside the IP data.</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Risk Score</div>
+      <div class="help-item">
+        <div class="help-item-desc">The score (0–100) is calculated from threat flags, DNSBL hits, VirusTotal detections, and Shodan exposure. Higher is riskier. Color coding: green is clean, yellow is suspicious, red is a known threat. The score also appears in the scan history for quick reference.</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">AI Analysis</div>
+      <div class="help-item">
+        <div class="help-item-label">Gemini AI Threat Summary</div>
+        <div class="help-item-desc">After a scan loads, click <strong>Analyse with Gemini AI</strong> (or the shortcut button at the top of results). Gemini receives all the collected data and returns a plain-English threat assessment with context — useful for understanding what the numbers actually mean.</div>
+      </div>
+      <div class="help-tip"><strong>Tip:</strong> AI analysis is a separate on-demand step and does not run automatically, so you only use the quota when you need it.</div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Top Bar</div>
+      <div class="help-item">
+        <div class="help-item-label">History</div>
+        <div class="help-item-desc">Stores your last 50 scans in this browser. Click any entry to instantly reload that result. Use the <strong>✕</strong> next to an entry to remove it, or <strong>Clear all</strong> to wipe the full list.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Settings</div>
+        <div class="help-item-desc">All scanning features are pre-configured and work out of the box with no setup needed. In Settings you can optionally enter your own API keys for VirusTotal, Shodan, ipinfo.io, and Proxycheck to use your personal quotas instead of the shared worker keys. Keys are stored in this browser only.</div>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <!-- API Keys Modal -->
@@ -563,6 +679,12 @@ function closeHistory() {
 $('history-btn').addEventListener('click', openHistory);
 $('history-close').addEventListener('click', closeHistory);
 $('history-overlay').addEventListener('click', closeHistory);
+
+function openHelp()  { $('help-overlay').classList.add('open'); $('help-panel').classList.add('open'); }
+function closeHelp() { $('help-overlay').classList.remove('open'); $('help-panel').classList.remove('open'); }
+$('help-btn').addEventListener('click', openHelp);
+$('help-close').addEventListener('click', closeHelp);
+$('help-overlay').addEventListener('click', closeHelp);
 $('history-clear').addEventListener('click', () => { saveHistory([]); renderHistory(); });
 
 // ── Modal ──────────────────────────────────────────────────────────────────
