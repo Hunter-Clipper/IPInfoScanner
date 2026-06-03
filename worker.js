@@ -53,6 +53,12 @@ function isAllowedOrigin(request) {
   );
 }
 
+// ── Scan result cache (KV-backed) ─────────────────────────────────────────
+// Requires a KV namespace bound to the worker as SCAN_CACHE_KV.
+// Setup: CF Dashboard → Workers & Pages → your worker →
+//        Settings → Bindings → Add KV Namespace → Variable: SCAN_CACHE_KV
+const SCAN_CACHE_TTL = 6 * 3600; // 6 hours in seconds
+
 // ── Rate limiting (KV-backed) ──────────────────────────────────────────────
 // Requires a KV namespace bound to the worker as RATE_LIMIT_KV.
 // Setup: CF Dashboard → Workers & Pages → your worker →
@@ -148,7 +154,7 @@ export default {
       if (path === '/lookup') {
         if (!await checkRateLimit(clientIp, env.RATE_LIMIT_KV, RATE_LIMIT_LOOKUP, 'lookup'))
           return jsonResponse({ error: 'Rate limit exceeded — max 30 scans per hour.' }, 429, request);
-        return handleLookup(request, url, env);
+        return handleLookup(request, url, env, ctx);
       }
       if (path === '/analyze') {
         if (!await checkRateLimit(clientIp, env.RATE_LIMIT_KV, RATE_LIMIT_ANALYZE, 'analyze'))
@@ -176,9 +182,21 @@ function handleMyIp(request) {
 }
 
 // ── /lookup ────────────────────────────────────────────────────────────────
-async function handleLookup(request, url, env = {}) {
+async function handleLookup(request, url, env = {}, ctx = null) {
   const input = (url.searchParams.get('ip') || request.headers.get('X-IP') || '').trim();
   if (!input) return jsonResponse({ error: 'Missing IP or domain' }, 400, request);
+
+  const fresh    = url.searchParams.get('fresh') === '1';
+  const cacheKv  = env.SCAN_CACHE_KV || null;
+  const cacheKey = `scan:${input.toLowerCase()}`;
+
+  // Cache read — skip on fresh=1 or if KV not yet bound
+  if (!fresh && cacheKv) {
+    try {
+      const cached = await cacheKv.get(cacheKey, { type: 'json' });
+      if (cached) return jsonResponse({ ...cached, _cached: true }, 200, request);
+    } catch { /* fail open */ }
+  }
 
   let ip = input;
   let resolvedFrom  = null;
@@ -248,7 +266,7 @@ async function handleLookup(request, url, env = {}) {
   const vtDomain    = vtDomainData.status    === 'fulfilled' ? vtDomainData.value    : null;
   const domainWhois = domainWhoisData.status === 'fulfilled' ? domainWhoisData.value : null;
 
-  return jsonResponse({
+  const result = {
     ip,
     resolvedFrom,
     resolvedIpv4,
@@ -259,8 +277,19 @@ async function handleLookup(request, url, env = {}) {
     torListSize: torListCache ? torListCache.size : 0,
     workerColo,
     workerCountry,
-    sources: { ipapi, ipinfo, proxycheck, virustotal, ipapis, whois, shodan, dnsbl, vtDomain, domainWhois }
-  }, 200, request);
+    sources: { ipapi, ipinfo, proxycheck, virustotal, ipapis, whois, shodan, dnsbl, vtDomain, domainWhois },
+    _cached: false,
+    _cachedAt: Date.now(),
+  };
+
+  // Cache write — non-blocking so it doesn't delay the response
+  if (cacheKv && ctx) {
+    ctx.waitUntil(
+      cacheKv.put(cacheKey, JSON.stringify(result), { expirationTtl: SCAN_CACHE_TTL }).catch(() => {})
+    );
+  }
+
+  return jsonResponse(result, 200, request);
 }
 
 // ── WHOIS ──────────────────────────────────────────────────────────────────

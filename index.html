@@ -99,6 +99,13 @@ h1 em{font-style:normal;color:var(--accent)}
 .share-copy:hover{background:var(--accent-hover)}
 .share-copy.copied{background:var(--green)}
 
+/* Cache bar */
+.cache-bar{display:none;align-items:center;gap:8px;margin-bottom:.75rem;padding:7px 12px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border-med)}
+.cache-bar.visible{display:flex}
+.cache-bar-text{flex:1;font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--text-muted)}
+.cache-bar-btn{background:var(--bg-hover);border:1px solid var(--border-med);color:var(--text-muted);font-family:'Inter',sans-serif;font-weight:600;font-size:.7rem;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+.cache-bar-btn:hover{border-color:var(--accent);color:var(--accent)}
+
 /* Settings button */
 .settings-btn{background:var(--bg-card);border:1px solid var(--border-med);border-radius:50px;padding:0 14px;height:42px;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;color:var(--text-muted);box-shadow:var(--shadow);transition:all .15s}
 .settings-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -476,6 +483,11 @@ h1 em{font-style:normal;color:var(--accent)}
     <button class="share-copy" id="share-copy">Copy</button>
   </div>
 
+  <div class="cache-bar" id="cache-bar">
+    <span class="cache-bar-text" id="cache-bar-text"></span>
+    <button class="cache-bar-btn" id="fresh-scan-btn">↺ Fresh Scan</button>
+  </div>
+
   <div class="status-bar">
     <div class="status-dot" id="sdot"></div>
     <span id="stext">Ready — enter any IP or domain above.</span>
@@ -732,6 +744,8 @@ function updateUrl(ip) {
   $('share-url').textContent = u.toString();
   $('share-bar').classList.add('visible');
 }
+$('fresh-scan-btn').addEventListener('click', () => lookup($('ip-input').value.trim(), true));
+
 $('share-copy').addEventListener('click', () => {
   navigator.clipboard.writeText($('share-url').textContent).then(() => {
     $('share-copy').textContent='Copied!'; $('share-copy').classList.add('copied');
@@ -740,13 +754,21 @@ $('share-copy').addEventListener('click', () => {
 });
 
 // ── Main lookup ────────────────────────────────────────────────────────────
-async function lookup(ip) {
+function timeSince(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60)   return `${s}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m`;
+  return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+}
+
+async function lookup(ip, fresh = false) {
   ip = ip.trim();
   if (!ip) { $('ip-input').focus(); return; }
   $('ip-input').value = ip;
   setLoading(true);
   $('results').classList.remove('visible');
   $('empty').style.display = 'none';
+  $('cache-bar').classList.remove('visible');
   document.title = 'IP Scanner';
   $('sources').style.display = 'none';
   $('raw-box').style.display = 'none';
@@ -758,7 +780,7 @@ async function lookup(ip) {
   $('ai-btn').disabled = false;
   $('ai-shortcut').classList.remove('visible');
   lastScanData = null;
-  setStatus(`Scanning ${ip}…`, 'loading');
+  setStatus(fresh ? `Re-scanning ${ip} (bypassing cache)…` : `Scanning ${ip}…`, 'loading');
   document.title = 'IP Scanner — ' + ip;
   updateUrl(ip);
 
@@ -770,7 +792,8 @@ async function lookup(ip) {
 
   let data;
   try {
-    const r = await fetch(`${WORKER_BASE}/lookup?ip=${encodeURIComponent(ip)}&_=${Date.now()}`, { method:'GET', headers, cache:'no-store' });
+    const freshParam = fresh ? '&fresh=1' : '';
+    const r = await fetch(`${WORKER_BASE}/lookup?ip=${encodeURIComponent(ip)}&_=${Date.now()}${freshParam}`, { method:'GET', headers, cache:'no-store' });
     if (!r.ok) { const e = await r.json().catch(()=>({error:'Unknown error'})); throw new Error(e.error || `HTTP ${r.status}`); }
     data = await r.json();
   } catch (e) {
@@ -780,6 +803,11 @@ async function lookup(ip) {
     $('empty').querySelector('.empty-icon').textContent='⚠️';
     $('empty').querySelector('.empty-text').textContent=e.message;
     return;
+  }
+
+  if (data._cached && data._cachedAt) {
+    $('cache-bar-text').textContent = `Cached result · scanned ${timeSince(data._cachedAt)} ago`;
+    $('cache-bar').classList.add('visible');
   }
 
   const { sources, resolvedFrom, resolvedIpv4, resolvedIpv6, isDomain, isTorConfirmed, torListSize, workerColo, workerCountry } = data;
