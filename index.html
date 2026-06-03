@@ -49,10 +49,6 @@ body{font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',s
 .top-menu-item{display:flex;align-items:center;gap:10px;padding:.75rem 1rem;font-family:'Inter',sans-serif;font-size:.82rem;font-weight:500;color:var(--text-muted);cursor:pointer;transition:background .15s,color .15s;border:none;background:none;width:100%;text-align:left}
 .top-menu-item:hover{background:var(--bg-hover);color:var(--text-h)}
 .top-menu-item+.top-menu-item{border-top:1px solid var(--border)}
-@media(max-width:600px){
-  .history-btn,.settings-btn,.help-btn{display:none}
-  .hamburger-wrap{display:block}
-}
 
 /* History button */
 .history-btn{background:var(--bg-card);border:1px solid var(--border-med);border-radius:50px;padding:0 14px;height:42px;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:.78rem;color:var(--text-muted);box-shadow:var(--shadow);transition:all .15s}
@@ -321,6 +317,10 @@ h1 em{font-style:normal;color:var(--accent)}
 .raw-toggle:hover{color:var(--accent)}
 #raw-box{display:none;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-top:.5rem;font-family:'JetBrains Mono',monospace;font-size:.67rem;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto}
 
+@media(max-width:600px){
+  .history-btn,.settings-btn,.help-btn{display:none}
+  .hamburger-wrap{display:block}
+}
 </style>
 </head>
 <body>
