@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: https://flagcdn.com; connect-src https://ipscan.hunter-clipper.workers.dev;">
+<title>IP Scanner</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0iIzYzNWFmZiIvPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjkiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjMiIGZpbGw9IndoaXRlIi8+CiAgPGxpbmUgeDE9IjE2IiB5MT0iNCIgeDI9IjE2IiB5Mj0iOCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8bGluZSB4MT0iMTYiIHkxPSIyNCIgeDI9IjE2IiB5Mj0iMjgiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGxpbmUgeDE9IjQiIHkxPSIxNiIgeDI9IjgiIHkyPSIxNiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8bGluZSB4MT0iMjQiIHkxPSIxNiIgeDI9IjI4IiB5Mj0iMTYiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPg==">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<!-- Top controls -->
+<div class="top-controls">
+  <button class="history-btn" id="history-btn">🕐 History <span class="history-badge" id="history-badge">0</span></button>
+  <button class="settings-btn" id="settings-btn">⚙ Settings</button>
+  <button class="help-btn" id="help-btn">? Help</button>
+  <div class="hamburger-wrap" id="hamburger-wrap">
+    <button class="hamburger-btn" id="hamburger-btn">☰</button>
+    <div class="top-menu" id="top-menu">
+      <button class="top-menu-item" id="menu-history">🕐 History</button>
+      <button class="top-menu-item" id="menu-settings">⚙ Settings</button>
+      <button class="top-menu-item" id="menu-help">? Help</button>
+    </div>
+  </div>
+  <div class="theme-toggle">
+    <button class="theme-btn active" id="btn-dark"  title="Dark">🌙</button>
+    <button class="theme-btn"        id="btn-light" title="Light">☀️</button>
+  </div>
+</div>
+
+<!-- History panel -->
+<div class="history-overlay" id="history-overlay"></div>
+<div class="history-panel" id="history-panel">
+  <div class="history-header">
+    <div class="history-title">Scan History</div>
+    <div class="history-actions">
+      <button class="history-clear" id="history-clear">Clear all</button>
+      <button class="history-close" id="history-close">✕</button>
+    </div>
+  </div>
+  <div class="history-list" id="history-list"></div>
+</div>
+
+<!-- Help panel -->
+<div class="help-overlay" id="help-overlay"></div>
+<div class="help-panel" id="help-panel">
+  <div class="help-header">
+    <div class="help-title">Quick Guide</div>
+    <button class="help-close" id="help-close">✕</button>
+  </div>
+  <div class="help-body">
+
+    <div class="help-section">
+      <div class="help-section-title">Getting Started</div>
+      <div class="help-item">
+        <div class="help-item-label">Scan an IP or Domain</div>
+        <div class="help-item-desc">Type any <span class="help-tag">IPv4</span>, <span class="help-tag">IPv6</span>, or <span class="help-tag">domain name</span> into the search bar and click <strong>Scan ↗</strong> or press <strong>Enter</strong>. Results load in a few seconds.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Check Your Own IP</div>
+        <div class="help-item-desc">Click <strong>My IP</strong> to auto-fill and scan your current public IP address.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Share a Result</div>
+        <div class="help-item-desc">After a scan, a <strong>Share</strong> bar appears with a direct link. Hit <strong>Copy</strong> to grab it — anyone opening the link will land straight on that result.</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Result Sections</div>
+      <div class="help-item">
+        <div class="help-item-label">Identification &amp; Geo</div>
+        <div class="help-item-desc">Country, city, timezone, coordinates, hostname, and whether the address is IPv4 or IPv6. Dual-stack lookups show both addresses.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Network (ASN)</div>
+        <div class="help-item-desc">The ISP or hosting provider, Autonomous System Number, and the registered CIDR range the IP belongs to. Hosting/datacenter IPs will show the cloud provider here.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Privacy &amp; Threat Flags</div>
+        <div class="help-item-desc">Quick-read badges for VPN, proxy, Tor exit node, relay, datacenter, mobile, and crawler detection. Each flag is sourced from multiple providers and weighted into the overall risk score.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">WHOIS / RDAP</div>
+        <div class="help-item-desc">Registration details for the IP block — registrar, org name, country, and abuse contact email pulled from regional internet registries.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Shodan</div>
+        <div class="help-item-desc">Open ports and running services detected by Shodan's internet-wide scans. Shows service banners and version strings where available — useful for spotting exposed infrastructure.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Blacklist / DNSBL</div>
+        <div class="help-item-desc">Checks the IP against dozens of DNS-based blocklists used by mail servers and firewalls. A hit here means the IP has a spam or abuse history.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">VirusTotal</div>
+        <div class="help-item-desc">Aggregated malware and threat engine verdicts from VirusTotal's 90+ security vendors. Shows the detection ratio and individual engine results.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Domain Intelligence</div>
+        <div class="help-item-desc">Appears only when scanning a domain. Shows domain WHOIS registration data and VirusTotal URL/domain scan results alongside the IP data.</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Risk Score</div>
+      <div class="help-item">
+        <div class="help-item-desc">The score (0–100) is calculated from threat flags, DNSBL hits, VirusTotal detections, and Shodan exposure. Higher is riskier. Color coding: green is clean, yellow is suspicious, red is a known threat. The score also appears in the scan history for quick reference.</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">AI Analysis</div>
+      <div class="help-item">
+        <div class="help-item-label">Gemini AI Threat Summary</div>
+        <div class="help-item-desc">After a scan loads, click <strong>Analyse with Gemini AI</strong> (or the shortcut button at the top of results). Gemini receives all the collected data and returns a plain-English threat assessment with context — useful for understanding what the numbers actually mean.</div>
+      </div>
+      <div class="help-tip"><strong>Tip:</strong> AI analysis is a separate on-demand step and does not run automatically, so you only use the quota when you need it.</div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-section-title">Top Bar</div>
+      <div class="help-item">
+        <div class="help-item-label">History</div>
+        <div class="help-item-desc">Stores your last 50 scans in this browser. Click any entry to instantly reload that result. Use the <strong>✕</strong> next to an entry to remove it, or <strong>Clear all</strong> to wipe the full list.</div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-label">Settings</div>
+        <div class="help-item-desc">All scanning features are pre-configured and work out of the box with no setup needed. In Settings you can optionally enter your own API keys for VirusTotal, Shodan, ipinfo.io, and Proxycheck to use your personal quotas instead of the shared worker keys. Keys are stored in this browser only.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- API Keys Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">API Keys</div>
+    <div class="modal-sub">All API keys are <strong>pre-configured</strong> in the Cloudflare worker — full scanning works out of the box with no setup required.<br><br>You can optionally enter your own keys below to use your personal quota instead of the shared worker keys. Your keys are stored in this browser only and take priority over the built-in ones.</div>
+    <div class="key-fields">
+      <div class="key-field">
+        <label>VirusTotal API Key <span style="font-weight:400;opacity:.5">(optional override)</span></label>
+        <div class="field-desc">Pre-configured. Add your own key to use your personal 500/day quota. Free at <a href="https://www.virustotal.com/gui/join-us" target="_blank">virustotal.com</a>.</div>
+        <div class="key-field-wrap"><input type="password" id="k-vt" placeholder="VT API key…" autocomplete="off"><button class="eye-btn" data-target="k-vt">👁</button></div>
+      </div>
+      <div class="key-field">
+        <label>Shodan API Key <span style="font-weight:400;opacity:.5">(optional override)</span></label>
+        <div class="field-desc">Pre-configured. Add your own key to use your personal quota. <a href="https://account.shodan.io/register" target="_blank">shodan.io</a>.</div>
+        <div class="key-field-wrap"><input type="password" id="k-shodan" placeholder="Shodan API key…" autocomplete="off"><button class="eye-btn" data-target="k-shodan">👁</button></div>
+      </div>
+      <div class="key-field">
+        <label>ipinfo.io Token <span style="font-weight:400;opacity:.5">(optional override)</span></label>
+        <div class="field-desc">Pre-configured. Add your own token to use your personal 50k/day quota. <a href="https://ipinfo.io/signup" target="_blank">ipinfo.io/signup</a></div>
+        <div class="key-field-wrap"><input type="password" id="k-ipinfo" placeholder="ipinfo token…" autocomplete="off"><button class="eye-btn" data-target="k-ipinfo">👁</button></div>
+      </div>
+      <div class="key-field">
+        <label>Proxycheck.io Key <span style="font-weight:400;opacity:.5">(optional override)</span></label>
+        <div class="field-desc">Pre-configured. Add your own key to use your personal quota. <a href="https://proxycheck.io/dashboard/" target="_blank">proxycheck.io</a></div>
+        <div class="key-field-wrap"><input type="password" id="k-proxycheck" placeholder="Proxycheck key…" autocomplete="off"><button class="eye-btn" data-target="k-proxycheck">👁</button></div>
+      </div>
+    </div>
+    <div class="modal-note">🔒 Keys are saved on this device only and cleared when you clear browser data.</div>
+    <div class="modal-actions">
+      <button class="modal-clear" id="modal-clear-all">Clear all</button>
+      <button class="modal-cancel" id="modal-cancel">Cancel</button>
+      <button class="modal-save"   id="modal-save">Save Keys</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="header-badge"><div class="pulse"></div>IP Scanner</div>
+    <h1>IP <em>Scanner</em></h1>
+    <p class="subtitle">// geo · asn · vpn · tor · shodan · whois · virustotal · dnsbl · ai analysis</p>
+  </div>
+
+  <div class="search-wrap">
+    <input id="ip-input" type="text" placeholder="Enter IPv4, IPv6, or domain…" autocomplete="off" spellcheck="false">
+    <button id="my-ip-btn">My IP</button>
+    <button id="lookup-btn"><span class="btn-label">Scan ↗</span><div class="spinner"></div></button>
+  </div>
+
+  <div class="share-bar" id="share-bar">
+    <span style="font-size:.68rem;color:var(--text-muted);flex-shrink:0">🔗 Share:</span>
+    <span class="share-url" id="share-url"></span>
+    <button class="share-copy" id="share-copy">Copy</button>
+  </div>
+
+  <div class="cache-bar" id="cache-bar">
+    <span class="cache-bar-text" id="cache-bar-text"></span>
+    <button class="cache-bar-btn" id="fresh-scan-btn">↺ Fresh Scan</button>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot" id="sdot"></div>
+    <span id="stext">Ready — enter any IP or domain above.</span>
+  </div>
+
+  <div class="results" id="results">
+    <div id="threat-banner"></div>
+
+    <!-- Quick-access AI button at top of results -->
+    <button class="ai-shortcut" id="ai-shortcut">
+      <span>✨</span>
+      <span>Analyse with Gemini AI</span>
+      <span class="ai-shortcut-arrow">↓ scroll to analysis</span>
+    </button>
+
+    <div class="section-divider">identification</div>
+    <div class="section-grid">
+      <div class="card" id="c-basic"></div>
+      <div class="card" id="c-geo"></div>
+    </div>
+
+    <div class="section-divider">network</div>
+    <div class="section-grid">
+      <div class="card" id="c-asn"></div>
+      <div class="card" id="c-abuse"></div>
+    </div>
+
+    <div class="section-divider">privacy &amp; threat flags</div>
+    <div class="section-grid">
+      <div class="card card-full" id="c-flags"></div>
+    </div>
+
+    <div class="section-divider">whois / rdap</div>
+    <div class="section-grid">
+      <div class="card" id="c-whois"></div>
+      <div class="card" id="c-whois2"></div>
+    </div>
+
+    <div class="section-divider">shodan</div>
+    <div class="section-grid">
+      <div class="card card-full" id="c-shodan"></div>
+    </div>
+
+    <div class="section-divider">blacklist / dnsbl check</div>
+    <div class="section-grid">
+      <div class="card card-full" id="c-dnsbl"></div>
+    </div>
+
+    <div class="section-divider">virustotal scan</div>
+    <div class="section-grid">
+      <div class="card card-full" id="c-vt"></div>
+    </div>
+
+    <div id="domain-sections" style="display:none">
+      <div class="section-divider">domain intelligence</div>
+      <div class="section-grid">
+        <div class="card" id="c-domain-whois"></div>
+        <div class="card" id="c-domain-vt"></div>
+      </div>
+    </div>
+
+    <div class="section-divider">✨ ai analysis</div>
+    <div class="ai-section" id="ai-section">
+      <button class="ai-btn" id="ai-btn">
+        <span id="ai-btn-icon">✨</span>
+        <span id="ai-btn-label">Analyse with Gemini AI</span>
+      </button>
+      <div class="ai-result" id="ai-result">
+        <div class="ai-header">
+          <span class="ai-header-icon">🤖</span>
+          <span class="ai-header-title">AI Threat Analysis</span>
+          <span class="ai-header-model" id="ai-model-label">gemini-3.1-flash-lite</span>
+        </div>
+        <div class="ai-body" id="ai-body"></div>
+      </div>
+    </div>
+
+    <div class="raw-toggle" id="raw-toggle">▶ show raw API data<button class="raw-copy" id="raw-copy" onclick="event.stopPropagation()">Copy</button></div>
+    <div id="raw-box"></div>
+  </div>
+
+  <div class="empty-state" id="empty">
+    <div class="empty-icon">🔍</div>
+    <p class="empty-text">enter an ip or domain to begin scanning</p>
+  </div>
+
+  <div class="sources" id="sources" style="display:none">
+    powered by <a href="https://ip-api.com" target="_blank">ip-api.com</a> ·
+    <a href="https://ipinfo.io" target="_blank">ipinfo.io</a> ·
+    <a href="https://proxycheck.io" target="_blank">proxycheck.io</a> ·
+    <a href="https://virustotal.com" target="_blank">virustotal</a> ·
+    <a href="https://shodan.io" target="_blank">shodan</a> ·
+    <a href="https://ipapi.is" target="_blank">ipapi.is</a>
+    via cloudflare worker
+  </div>
+</div>
+
+<script src="app.js" data-cfasync="false"></script>
+</body>
+</html>
