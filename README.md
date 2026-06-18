@@ -60,25 +60,25 @@ VPN · Proxy · Tor Exit Node · Data Centre / Hosting · Anonymous / Masked · 
 ## Architecture
 
 ```
-Browser (index.html)
-    │
-    │  GET /lookup?ip=…   (+ optional X-VT-Key, X-Shodan-Key headers)
-    │  GET /myip
-    │  POST /analyze
-    ▼
-Cloudflare Worker  (ipscan.hunter-clipper.workers.dev)
-    ├── ip-api.com
-    ├── ipinfo.io
-    ├── proxycheck.io
-    ├── ipapi.is
-    ├── VirusTotal API
-    ├── Shodan API
-    ├── RDAP / WHOIS
-    ├── DNSBL (DNS-over-HTTPS via Cloudflare 1.1.1.1)
-    └── Google Gemini API  (/analyze only)
+Browser (hunterclipper.com)          Your other apps
+    │  Origin/Referer check               │  X-API-Key header
+    │                                     │
+    └──────────────┬──────────────────────┘
+                   │
+                   ▼
+     Cloudflare Worker  (ipscan.hunter-clipper.workers.dev)
+         ├── ip-api.com
+         ├── ipinfo.io
+         ├── proxycheck.io
+         ├── ipapi.is
+         ├── VirusTotal API
+         ├── Shodan API
+         ├── RDAP / WHOIS
+         ├── DNSBL (DNS-over-HTTPS via Cloudflare 1.1.1.1)
+         └── Google Gemini API  (/analyze only)
 ```
 
-The worker fans out all source requests in parallel and returns a single aggregated JSON response. API keys for all services are pre-configured in the worker — the app works out of the box with no setup.
+The worker fans out all source requests in parallel and returns a single aggregated JSON response. Browser requests from hunterclipper.com are authenticated via Origin/Referer check. Programmatic access from other apps uses an `X-API-Key` header.
 
 ---
 
@@ -108,6 +108,95 @@ All scanning works out of the box via shared worker keys. To use your own quotas
 
 ### Shareable Links
 Every lookup updates the URL to `?scan=<ip-or-domain>` — copy from the share bar or just copy the browser URL. Opening the link loads and runs the scan automatically.
+
+---
+
+## Programmatic API Access
+
+The worker exposes all three endpoints to any app via an `X-API-Key` header.
+
+### Setup
+
+1. Generate a key: `openssl rand -hex 32`
+2. In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settings → Variables & Secrets** → Add Secret:
+
+| Name | Value |
+|---|---|
+| `WORKER_API_KEY` | the key you generated |
+
+### Endpoints
+
+#### `GET /lookup` — full IP / domain scan
+
+```bash
+curl -H "X-API-Key: <your-key>" \
+  "https://ipscan.hunter-clipper.workers.dev/lookup?ip=1.2.3.4"
+```
+
+Add `&fresh=1` to bypass the 6-hour cache. Optionally pass your own intelligence API keys as headers:
+
+| Header | Service |
+|---|---|
+| `X-VT-Key` | VirusTotal |
+| `X-Shodan-Key` | Shodan |
+| `X-Ipinfo-Token` | ipinfo.io |
+| `X-Proxycheck-Key` | Proxycheck.io |
+
+**Response** — full JSON scan result. Key fields for threat scoring:
+
+```jsonc
+{
+  "ip": "1.2.3.4",
+  "isTorConfirmed": false,
+  "sources": {
+    "ipapi":      { "proxy": false, "hosting": false, ... },
+    "proxycheck": { "1.2.3.4": { "type": "VPN", "risk": 67 } },
+    "virustotal": { "data": { "attributes": { "last_analysis_stats": { "malicious": 0 } } } },
+    "dnsbl":      { "listed": 0, "checked": 34 },
+    ...
+  }
+}
+```
+
+#### `POST /analyze` — AI threat summary
+
+Pass a slim payload extracted from a `/lookup` response. The worker calls Gemini and returns a plain-English analysis.
+
+```bash
+curl -X POST \
+  -H "X-API-Key: <your-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ip": "1.2.3.4",
+    "country": "RU",
+    "isp": "Some Hosting LLC",
+    "riskScore": 74,
+    "vtMalCount": 6,
+    "vtTotal": 94,
+    "dnsblListed": 3,
+    "dnsblChecked": 34
+  }' \
+  "https://ipscan.hunter-clipper.workers.dev/analyze"
+```
+
+**Response:**
+```json
+{
+  "analysis": "**Threat Assessment**\n...",
+  "model": "gemini-3.1-flash-lite"
+}
+```
+
+#### `GET /myip` — caller's public IP
+
+```bash
+curl -H "X-API-Key: <your-key>" \
+  "https://ipscan.hunter-clipper.workers.dev/myip"
+```
+
+```json
+{ "ip": "203.0.113.42" }
+```
 
 ---
 
