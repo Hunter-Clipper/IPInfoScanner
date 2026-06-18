@@ -15,6 +15,8 @@
  *   SHODAN_API_KEY       — Shodan API key (account.shodan.io)
  *   IPINFO_TOKEN         — ipinfo.io token (ipinfo.io/signup)
  *   PROXYCHECK_API_KEY   — proxycheck.io key (proxycheck.io/dashboard)
+ *   WORKER_API_KEY       — secret for programmatic access; pass as X-API-Key header
+ *                          Generate: openssl rand -hex 32
  *
  * Client headers take priority over worker secrets — users can supply their own keys.
  */
@@ -51,6 +53,20 @@ function isAllowedOrigin(request) {
     referer.startsWith('https://hunterclipper.com') ||
     referer.includes('.hunterclipper.com')
   );
+}
+
+// Returns true if the request carries a valid WORKER_API_KEY in X-API-Key header.
+// Constant-time comparison prevents timing attacks from leaking key length/prefix.
+function isValidApiKey(request, env) {
+  if (!env.WORKER_API_KEY) return false;
+  const provided = request.headers.get('X-API-Key') || '';
+  if (provided.length === 0 || provided.length !== env.WORKER_API_KEY.length) return false;
+  const enc = new TextEncoder();
+  const a = enc.encode(provided);
+  const b = enc.encode(env.WORKER_API_KEY);
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
 }
 
 // ── Scan result cache (KV-backed) ─────────────────────────────────────────
@@ -144,7 +160,7 @@ export default {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: buildCorsHeaders(request) });
     }
-    if (!isAllowedOrigin(request)) {
+    if (!isAllowedOrigin(request) && !isValidApiKey(request, env)) {
       return jsonResponse({ error: 'Forbidden' }, 403, request);
     }
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
