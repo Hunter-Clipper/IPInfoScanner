@@ -197,7 +197,7 @@ export default {
       if (path === '/analyze') {
         if (!await checkRateLimit(clientIp, env.RATE_LIMIT_KV, RATE_LIMIT_ANALYZE, 'analyze'))
           return jsonResponse({ error: 'Rate limit exceeded — max 10 AI analyses per hour.' }, 429, request);
-        return handleAnalyze(request, env);
+        return handleAnalyze(request, env, ctx);
       }
       if (path === '/myip')    return handleMyIp(request);
       return jsonResponse({ error: 'Not found' }, 404, request);
@@ -783,7 +783,7 @@ async function fetchIpapis(ip, bust) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 // ── /analyze — Gemini AI analysis ────────────────────────────────────────────
-async function handleAnalyze(request, env) {
+async function handleAnalyze(request, env, ctx) {
   // Key lives in encrypted Worker secret — never touches the browser
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -821,6 +821,28 @@ async function handleAnalyze(request, env) {
   // Reject ip values that contain characters not valid in an IP address or domain name.
   // This is the single most important field — it appears first in the prompt.
   if (!/^[a-zA-Z0-9.\-:]+$/.test(ip)) return jsonResponse({ error: 'Invalid ip field' }, 400, request);
+
+  // Cache AI responses the same way scan results are cached, so repeated
+  // "Analyse" clicks on the same scan don't burn Gemini tokens/quota. Keyed
+  // on the target plus the risk-relevant fields, so a genuinely different
+  // scan (different risk score, VT counts, etc.) still gets a fresh analysis
+  // even if the ip/domain string is the same.
+  const cacheKv = env.SCAN_CACHE_KV || null;
+  const cacheIdentifier = (resolvedFrom || ip).toLowerCase();
+  const cacheSignature = [
+    riskScore, pcRisk, vtMalCount, vtTotal,
+    dnsblListed, dnsblChecked,
+    isTor ? 1 : 0, isVpn ? 1 : 0, isProxy ? 1 : 0,
+    vtDomainMalicious, vtDomainSuspicious, vtDomainReputation,
+  ].map(v => v ?? '').join(':');
+  const cacheKey = `ai:${cacheIdentifier}:${cacheSignature}`;
+
+  if (cacheKv) {
+    try {
+      const cached = await cacheKv.get(cacheKey, { type: 'json' });
+      if (cached) return jsonResponse({ ...cached, _cached: true }, 200, request);
+    } catch { /* fail open */ }
+  }
 
   // Sanitize all user-supplied string fields before prompt interpolation.
   // Strips newlines/tabs (the primary injection vector — they break prompt structure),
@@ -932,7 +954,16 @@ async function handleAnalyze(request, env) {
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) return jsonResponse({ error: 'Gemini returned empty response.' }, 502, request);
 
-    return jsonResponse({ analysis: text, model: 'gemini-3.1-flash-lite' }, 200, request);
+    const result = { analysis: text, model: 'gemini-3.1-flash-lite' };
+
+    // Cache write — non-blocking so it doesn't delay the response
+    if (cacheKv && ctx) {
+      ctx.waitUntil(
+        cacheKv.put(cacheKey, JSON.stringify(result), { expirationTtl: SCAN_CACHE_TTL }).catch(() => {})
+      );
+    }
+
+    return jsonResponse(result, 200, request);
 
   } catch (e) {
     return jsonResponse({ error: 'Failed to reach Gemini API', message: e.message }, 502, request);
