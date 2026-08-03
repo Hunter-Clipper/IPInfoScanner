@@ -9,7 +9,14 @@
  *   GET  /myip               — returns caller's real IP from CF headers
  *   POST /analyze            — AI analysis of scan results via Gemini
  *
- * Secrets (set in Cloudflare Worker Settings → Variables & Secrets):
+ * Variables (set in Cloudflare Worker Settings → Variables & Secrets → Variables,
+ * or in wrangler.toml under [vars] — these are config, not sensitive):
+ *   ALLOWED_ORIGIN       — exact origin of your primary frontend, e.g.
+ *                          https://ipscanner.yourdomain.com
+ *   ALLOWED_ROOT_DOMAIN  — bare root domain used to allow any subdomain, e.g.
+ *                          yourdomain.com (matches yourdomain.com and *.yourdomain.com)
+ *
+ * Secrets (set in Cloudflare Worker Settings → Variables & Secrets → Secrets):
  *   GEMINI_API_KEY       — Google Gemini API key (aistudio.google.com)
  *   VIRUSTOTAL_API_KEY   — VirusTotal API key (virustotal.com)
  *   SHODAN_API_KEY       — Shodan API key (account.shodan.io)
@@ -21,18 +28,25 @@
  * Client headers take priority over worker secrets — users can supply their own keys.
  */
 
-const ALLOWED_ORIGIN = 'https://ipinfo.hunterclipper.com';
+// Per-request env lookup — lets buildCorsHeaders()/isAllowedOrigin() read
+// ALLOWED_ORIGIN/ALLOWED_ROOT_DOMAIN without threading `env` through every
+// jsonResponse() call site. Keyed by the Request object, which is unique per
+// invocation, so concurrent requests in the same isolate never collide; the
+// WeakMap lets entries be garbage-collected once a request finishes.
+const envByRequest = new WeakMap();
 
-// Reflect the exact requesting origin back if it belongs to hunterclipper.com,
-// otherwise fall back to the primary domain. This lets any subdomain call the
-// worker from a browser without needing to enumerate them all here.
+// Reflect the exact requesting origin back if it matches ALLOWED_ROOT_DOMAIN
+// (or one of its subdomains), otherwise fall back to ALLOWED_ORIGIN. This lets
+// any subdomain call the worker from a browser without enumerating them all.
 function buildCorsHeaders(request) {
-  const origin = request?.headers?.get('Origin') || '';
+  const env = envByRequest.get(request) || {};
+  const origin        = request?.headers?.get('Origin') || '';
+  const allowedOrigin = env.ALLOWED_ORIGIN || '';
+  const rootDomain    = env.ALLOWED_ROOT_DOMAIN || '';
   const allowed =
-    origin === 'https://hunterclipper.com' ||
-    origin.endsWith('.hunterclipper.com')
+    rootDomain && (origin === `https://${rootDomain}` || origin.endsWith(`.${rootDomain}`))
       ? origin
-      : ALLOWED_ORIGIN;
+      : allowedOrigin;
   return {
     'Access-Control-Allow-Origin':  allowed,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -42,17 +56,24 @@ function buildCorsHeaders(request) {
   };
 }
 
-// Returns true if the request originates from hunterclipper.com or any subdomain.
+// Returns true if the request originates from ALLOWED_ROOT_DOMAIN or any subdomain.
 // Origin/Referer headers are spoofable via curl/Postman but stop casual abuse.
 function isAllowedOrigin(request) {
+  const env = envByRequest.get(request) || {};
+  const rootDomain = env.ALLOWED_ROOT_DOMAIN || '';
+  if (!rootDomain) return false;
   const origin  = request.headers.get('Origin')  || '';
+  if (origin === `https://${rootDomain}` || origin.endsWith(`.${rootDomain}`)) return true;
+  // Parse Referer's hostname rather than string-matching the raw header —
+  // startsWith()/includes() on the raw string can be spoofed with a prefix or
+  // suffix trick (e.g. https://yourdomain.com.attacker.com).
   const referer = request.headers.get('Referer') || '';
-  return (
-    origin  === 'https://hunterclipper.com'    ||
-    origin.endsWith('.hunterclipper.com')       ||
-    referer.startsWith('https://hunterclipper.com') ||
-    referer.includes('.hunterclipper.com')
-  );
+  try {
+    const refHost = new URL(referer).hostname;
+    return refHost === rootDomain || refHost.endsWith(`.${rootDomain}`);
+  } catch {
+    return false;
+  }
 }
 
 // Returns true if the request carries a valid WORKER_API_KEY in X-API-Key header.
@@ -157,6 +178,7 @@ const DNSBL_LISTS = [
 // ── Router ─────────────────────────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
+    envByRequest.set(request, env);
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: buildCorsHeaders(request) });
     }
