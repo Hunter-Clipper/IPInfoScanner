@@ -831,7 +831,7 @@ $('ai-btn').addEventListener('click', async () => {
       btn.disabled = false;
     } else {
       $('ai-body').innerHTML = renderMarkdown(result.analysis);
-      $('ai-model-label').textContent = result.model || 'gemini-3.1-flash-lite';
+      $('ai-model-label').textContent = (result.model || 'gemini-3.1-flash-lite') + (result._cached ? ' · cached' : '');
       $('ai-result').classList.add('visible');
       icon.textContent = '✅';
       label.textContent = 'Re-analyse';
