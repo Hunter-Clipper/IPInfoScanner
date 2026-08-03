@@ -275,6 +275,10 @@ async function lookup(ip, fresh = false) {
   const vtMalCount = (vtStats.malicious||0) + (vtStats.suspicious||0);
   const dnsblCount = dnsbl?.listed || 0;
 
+  const vtDomainMalCount = (isDomain && vtDomain && !vtDomain.error)
+    ? (vtDomain.malicious||0) + (vtDomain.suspicious||0)
+    : 0;
+
   // ── Risk scoring — weighted additive model ──────────────────────────────
   let riskScore = 0;
 
@@ -294,6 +298,13 @@ async function lookup(ip, fresh = false) {
     else                       riskScore += 8;
   }
 
+  if (vtDomainMalCount > 0) {
+    if (vtDomainMalCount >= 10)      riskScore += 40;
+    else if (vtDomainMalCount >= 5)  riskScore += 28;
+    else if (vtDomainMalCount >= 2)  riskScore += 18;
+    else                             riskScore += 8;
+  }
+
   const dnsblLists   = dnsbl?.lists || [];
   const aggressiveDnsbl = ['UCEPROTECT L2','UCEPROTECT L3'];
   const seriousHits  = dnsblLists.filter(l => l.listed && !aggressiveDnsbl.includes(l.name)).length;
@@ -306,7 +317,7 @@ async function lookup(ip, fresh = false) {
   if (isHosting)      riskScore += 4;
 
   const badSignals = (isTor?1:0) + (isVpn?1:0) + (isProxy?1:0) +
-                     (vtMalCount>0?1:0) + (seriousHits>0?1:0) + (pcrisk>=50?1:0);
+                     (vtMalCount>0?1:0) + (vtDomainMalCount>0?1:0) + (seriousHits>0?1:0) + (pcrisk>=50?1:0);
   if (badSignals >= 3) riskScore = Math.round(riskScore * 1.2);
   if (badSignals >= 4) riskScore = Math.round(riskScore * 1.15);
 
@@ -326,6 +337,7 @@ async function lookup(ip, fresh = false) {
   const tSub   = isTor?'Confirmed Tor network exit node'
                : dnsblCount>0?`Listed on ${dnsblCount} blacklist${dnsblCount>1?'s':''}`
                : vtMalCount>0?`Flagged by ${vtMalCount} VirusTotal engine${vtMalCount>1?'s':''}`
+               : vtDomainMalCount>0?`Domain flagged by ${vtDomainMalCount} VirusTotal engine${vtDomainMalCount>1?'s':''}`
                : isVpn?'VPN provider detected'
                : isProxy?'Proxy / anonymiser'
                : isHosting?'Data centre / hosting ASN'
@@ -435,6 +447,7 @@ async function lookup(ip, fresh = false) {
     const resolveNote = resolvedFrom ? ' (' + resolvedFrom + ' → ' + data.ip + ')' : '';
     setStatus('Scan complete' + resolveNote, 'success');
     document.title = 'IP Scanner — ' + (resolvedFrom || data.ip);
+    data.riskScore = riskScore;
     lastScanData = data;
     $('ai-shortcut').classList.add('visible');
 

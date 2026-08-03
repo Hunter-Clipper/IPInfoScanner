@@ -814,20 +814,23 @@ async function handleAnalyze(request, env) {
 
   const prompt = 'You are a cybersecurity analyst writing for a technical but non-specialist audience. ' +
     (isDomain
-      ? 'Analyse both the domain and IP intelligence data below. The domain and its resolved IP may have different risk profiles — assess both, then give a combined verdict. '
+      ? 'Analyse BOTH the domain intelligence AND the IP intelligence data below as two distinct subjects with potentially different risk profiles — a clean IP does not mean a clean domain, and vice versa. Give the domain findings (registrar, age, VT domain reputation, categories, SSL) equal weight and space to the IP findings — do not let the analysis default to being only about the IP. Then give one combined verdict. '
       : 'Analyse the IP intelligence data below. '
     ) +
     'Do not just label it safe or dangerous — explain WHY based on the specific data points. ' +
     'If something is clean, explain what that means. If something is suspicious, explain what it indicates. ' +
     'Use plain English. Structure your response with exactly these four sections:\n\n' +
     '**Threat Assessment**\n' +
-    'Overall risk level (Low / Medium / High / Critical) and 2-3 sentences explaining what this IP is and why it received that rating. Reference specific data to justify your conclusion.\n\n' +
+    (isDomain
+      ? 'Overall risk level (Low / Medium / High / Critical) and 2-3 sentences explaining what this domain and its resolved IP are and why they received that rating. Reference specific data from BOTH the domain and the IP to justify your conclusion.\n\n'
+      : 'Overall risk level (Low / Medium / High / Critical) and 2-3 sentences explaining what this IP is and why it received that rating. Reference specific data to justify your conclusion.\n\n'
+    ) +
     '**Key Findings**\n' +
-    'Bullet points covering the most significant facts. For each finding, briefly explain what it means — e.g. do not just say "listed on SpamCop", explain that this means the IP has been reported for sending unsolicited email. Include both red flags AND reassuring findings so the reader gets a balanced picture.\n\n' +
+    'Bullet points covering the most significant facts.' + (isDomain ? ' Include at least one bullet specifically about the domain (registrar/age/registration status) and at least one specifically about the domain\'s VirusTotal reputation, in addition to the IP-side findings.' : '') + ' For each finding, briefly explain what it means — e.g. do not just say "listed on SpamCop", explain that this means the IP has been reported for sending unsolicited email. Include both red flags AND reassuring findings so the reader gets a balanced picture.\n\n' +
     '**Context**\n' +
     '1-2 sentences giving broader context — what type of operator typically uses this IP range, whether the findings are consistent with each other, or any caveats worth knowing.\n\n' +
     '**Recommendation**\n' +
-    '1-2 clear action sentences — what should someone do if they see this IP in their firewall logs, mail server, or web traffic?\n\n' +
+    '1-2 clear action sentences — what should someone do if they see this ' + (isDomain ? 'domain or IP' : 'IP') + ' in their firewall logs, mail server, or web traffic?\n\n' +
     'IP data:\n' +
     '- IP: ' + safe(ip, 45) + (resolvedFrom ? ' (resolved from: ' + safe(resolvedFrom, 253) + ')' : '') + '\n' +
     '- Location: ' + safe(city) + ', ' + safe(country) + '\n' +
@@ -843,7 +846,7 @@ async function handleAnalyze(request, env) {
     '- WHOIS registrant: ' + safe(whoisRegistrant) + ' | Abuse contact: ' + safe(whoisAbuse) + '\n\n' +
     // Append domain section only when scanning a domain
     (isDomain ? (
-      '\n\nDomain data (separate from IP):\n' +
+      '\n\nDomain data (a distinct subject from the IP above — cover it explicitly, do not skip it):\n' +
       '- Domain: ' + safe(resolvedFrom, 253) + '\n' +
       '- IPv4: ' + safe(resolvedIpv4, 45) + ' | IPv6: ' + safe(resolvedIpv6, 45) + '\n' +
       '- Domain Registrar: ' + safe(domainRegistrar) + '\n' +
