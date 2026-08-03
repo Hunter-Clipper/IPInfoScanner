@@ -86,6 +86,8 @@ All intelligence source requests are fanned out in parallel via `Promise.allSett
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed: `npm install -g wrangler`
 - API keys for the intelligence sources you want to use (all optional — the tool degrades gracefully without them)
 
+Everything the **worker** needs is config — no source edits required. The **frontend** is three static files with no build step, so it does need two small one-time edits to point at your worker (steps 6a/6b below); there's no way around that without introducing a bundler.
+
 ### 1. Clone the repo
 
 ```bash
@@ -93,30 +95,22 @@ git clone https://github.com/your-username/IPInfoScanner.git
 cd IPInfoScanner
 ```
 
-### 2. Configure the worker
+### 2. Create a `wrangler.toml`
 
-**2a. Update the allowed origin**
-
-In `worker.js`, replace the domain checks with your own domain:
-
-```js
-// Line ~24
-const ALLOWED_ORIGIN = 'https://ipscanner.yourdomain.com';
-
-// Lines ~32–54 — replace the hardcoded domain with your own in both
-// buildCorsHeaders() and isAllowedOrigin()
-origin === 'https://yourdomain.com' ||
-origin.endsWith('.yourdomain.com')
-```
-
-**2b. Create a `wrangler.toml`**
-
-Wrangler needs a config file to know your account and worker name. Create `wrangler.toml` in the project root:
+Wrangler needs a config file to know your account, worker name, KV bindings, and the two config variables the worker's CORS/auth logic reads at runtime. Create `wrangler.toml` in the project root:
 
 ```toml
 name = "your-worker-name"
 main = "worker.js"
 compatibility_date = "2024-01-01"
+
+[vars]
+# Exact origin of your primary frontend — used as the CORS fallback value.
+ALLOWED_ORIGIN = "https://ipscanner.yourdomain.com"
+# Bare root domain — the worker allows this domain and any of its subdomains
+# to call it from a browser (Origin/Referer check), so you don't need to
+# enumerate every subdomain.
+ALLOWED_ROOT_DOMAIN = "yourdomain.com"
 
 [[kv_namespaces]]
 binding = "SCAN_CACHE_KV"
@@ -127,7 +121,9 @@ binding = "RATE_LIMIT_KV"
 id = "PASTE_KV_NAMESPACE_ID_HERE"
 ```
 
-**2c. Create the KV namespaces**
+> `ALLOWED_ORIGIN` and `ALLOWED_ROOT_DOMAIN` are plain config, not secrets — `[vars]` in `wrangler.toml` (checked into git) or **Settings → Variables & Secrets → Variables** in the dashboard both work. If you ever change domains, this is the only place you touch — `worker.js` itself never needs editing.
+
+### 3. Create the KV namespaces
 
 The worker uses two KV namespaces — one for scan result caching, one for rate limiting:
 
@@ -141,7 +137,7 @@ Each command outputs an `id` — paste those into your `wrangler.toml`.
 
 > The worker will still function without KV bindings — it fails open (no cache, no rate limiting). KV is optional but recommended.
 
-### 3. Deploy the worker
+### 4. Deploy the worker
 
 ```bash
 wrangler deploy
@@ -149,9 +145,9 @@ wrangler deploy
 
 Your worker is now live at `https://your-worker-name.your-cf-subdomain.workers.dev`.
 
-### 4. Add worker secrets
+### 5. Add worker secrets
 
-In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settings → Variables & Secrets**, add the following as **Secrets** (not plain variables):
+In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settings → Variables & Secrets**, add the following as **Secrets** (distinct from the `ALLOWED_ORIGIN`/`ALLOWED_ROOT_DOMAIN` Variables from step 2 — secrets are encrypted and never displayed again after saving):
 
 | Secret name | Where to get it | Required? |
 |---|---|---|
@@ -164,9 +160,9 @@ In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settin
 
 > All secrets are optional at the code level — the worker skips any source whose key is missing and returns `null` for that field. `WORKER_API_KEY` should be set if you want to use the REST API from other apps.
 
-### 5. Configure the frontend
+### 6. Configure the frontend
 
-**5a. Point the frontend at your worker**
+**6a. Point the frontend at your worker**
 
 In `app.js`, update `WORKER_BASE` to your worker URL:
 
@@ -175,7 +171,7 @@ In `app.js`, update `WORKER_BASE` to your worker URL:
 const WORKER_BASE = 'https://your-worker-name.your-cf-subdomain.workers.dev';
 ```
 
-**5b. Update the CSP in `index.html`**
+**6b. Update the CSP in `index.html`**
 
 The Content Security Policy restricts which hosts the page can connect to. Update it to match your worker URL:
 
@@ -184,7 +180,7 @@ The Content Security Policy restricts which hosts the page can connect to. Updat
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: https://flagcdn.com; connect-src https://your-worker-name.your-cf-subdomain.workers.dev;">
 ```
 
-### 6. Deploy the frontend
+### 7. Deploy the frontend
 
 **Option A — Cloudflare Pages (recommended)**
 
@@ -208,7 +204,7 @@ python3 -m http.server 8080
 
 ## Programmatic API Access
 
-All three worker endpoints are accessible from any app via an `X-API-Key` header. The key is checked against the `WORKER_API_KEY` secret you set in step 4.
+All three worker endpoints are accessible from any app via an `X-API-Key` header. The key is checked against the `WORKER_API_KEY` secret you set in step 5.
 
 ### `GET /lookup` — full IP / domain scan
 
