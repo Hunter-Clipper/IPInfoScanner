@@ -184,8 +184,11 @@ const DNSBL_LISTS = [
 export default {
   async fetch(request, env, ctx) {
     envByRequest.set(request, env);
-    const url  = new URL(request.url);
-    const path = url.pathname;
+    const url = new URL(request.url);
+    // Normalize a trailing slash (e.g. "/preview/" -> "/preview") so routing
+    // doesn't depend on exactly how an intermediary reverse proxy formats
+    // the forwarded path — some rewrite path-prefix rules always end in "/".
+    const path = url.pathname.replace(/\/+$/, '') || '/';
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: buildCorsHeaders(request) });
     }
