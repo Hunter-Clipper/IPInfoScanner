@@ -109,10 +109,30 @@ async function checkRateLimit(ip, kv, limit, endpoint) {
   // due to a missing binding during initial deployment.
   if (!kv) return true;
   const key = `rl:${endpoint}:${ip}`;
+  const now = Date.now();
   try {
-    const count = parseInt(await kv.get(key) || '0');
+    // Track the window's start time explicitly rather than just a counter.
+    // KV's put() fully replaces a key's expiration on every write — there's
+    // no "increment without touching TTL" — so re-supplying the full
+    // RATE_LIMIT_WINDOW on every increment would restart the window from
+    // the most recent request instead of the first, letting an attacker who
+    // paces requests just under the window stay under the limit forever.
+    // Shrinking the TTL toward the original window's fixed end keeps it a
+    // real rolling window.
+    const stored = await kv.get(key, { type: 'json' });
+    const windowStart = stored?.windowStart;
+    const windowExpired = !windowStart || (now - windowStart) >= RATE_LIMIT_WINDOW * 1000;
+    const count = windowExpired ? 0 : (stored?.count || 0);
+
     if (count >= limit) return false;
-    await kv.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW });
+
+    const newWindowStart = windowExpired ? now : windowStart;
+    const remainingSeconds = Math.ceil((newWindowStart + RATE_LIMIT_WINDOW * 1000 - now) / 1000);
+    await kv.put(
+      key,
+      JSON.stringify({ count: count + 1, windowStart: newWindowStart }),
+      { expirationTtl: Math.max(remainingSeconds, 60) } // KV requires >= 60s
+    );
     return true;
   } catch { return true; } // fail open on KV errors
 }
@@ -152,7 +172,6 @@ const DNSBL_LISTS = [
   ['spamrbl.imp.ch',              'IMP Spam RBL'],
   ['wormrbl.imp.ch',              'IMP Worm RBL'],
   ['virus.rbl.jp',                'RBL.JP Virus'],
-  ['bl.spamcop.net',              'SpamCop BL'],
   ['combined.abuse.ch',           'Abuse.ch Combined'],
   ['spam.abuse.ch',               'Abuse.ch Spam'],
   ['korea.services.net',          'Korea Services'],
@@ -202,7 +221,7 @@ export default {
       if (path === '/myip')    return handleMyIp(request);
       return jsonResponse({ error: 'Not found' }, 404, request);
     } catch (e) {
-      return jsonResponse({ error: 'Worker error', message: e.message }, 500, request);
+      return jsonResponse({ error: 'Worker error' }, 500, request);
     }
   }
 };
@@ -425,7 +444,7 @@ async function fetchShodan(ip, apiKey) {
       })),
     };
   } catch (e) {
-    return { error: 'network', message: e.message };
+    return { error: 'network' };
   }
 }
 
@@ -602,7 +621,7 @@ async function fetchVtDomain(domain, apiKey) {
       } : null,
     };
   } catch (e) {
-    return { error: 'network', message: e.message };
+    return { error: 'network' };
   }
 }
 
@@ -966,7 +985,7 @@ async function handleAnalyze(request, env, ctx) {
     return jsonResponse(result, 200, request);
 
   } catch (e) {
-    return jsonResponse({ error: 'Failed to reach Gemini API', message: e.message }, 502, request);
+    return jsonResponse({ error: 'Failed to reach Gemini API' }, 502, request);
   }
 }
 
