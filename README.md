@@ -145,7 +145,21 @@ wrangler deploy
 
 Your worker is now live at `https://your-worker-name.your-cf-subdomain.workers.dev`.
 
-### 5. Add worker secrets
+### 5. Bind `/preview` to your domain
+
+The Share button copies a link built from the page's own origin, e.g. `https://ipscanner.yourdomain.com/preview?ip=1.2.3.4` — not the worker's `workers.dev` URL — so links pasted into Slack/Discord/iMessage show your domain. That only works if `/preview` on your domain actually reaches the worker, which needs one more binding:
+
+In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settings → Domains & Routes → Add → Route**, add:
+
+```
+ipscanner.yourdomain.com/preview*
+```
+
+(use whatever domain your frontend is actually served from). This routes only that one path pattern to the worker — every other path on your domain keeps being served by whatever already hosts your static frontend, untouched.
+
+> This step is required, not optional — without it, shared links will 404 when opened, since the frontend always builds the Share link from its own origin now. If your zone has Cloudflare's Bot Fight Mode, WAF managed rules, or Turnstile enabled, make sure known link-unfurl bots (Slackbot, Discordbot, facebookexternalhit, etc.) — or this path specifically — are allowlisted, or they won't be able to fetch the preview to build the card.
+
+### 6. Add worker secrets
 
 In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settings → Variables & Secrets**, add the following as **Secrets** (distinct from the `ALLOWED_ORIGIN`/`ALLOWED_ROOT_DOMAIN` Variables from step 2 — secrets are encrypted and never displayed again after saving):
 
@@ -160,9 +174,9 @@ In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settin
 
 > All secrets are optional at the code level — the worker skips any source whose key is missing and returns `null` for that field. `WORKER_API_KEY` should be set if you want to use the REST API from other apps.
 
-### 6. Configure the frontend
+### 7. Configure the frontend
 
-**6a. Point the frontend at your worker**
+**7a. Point the frontend at your worker**
 
 In `app.js`, update `WORKER_BASE` to your worker URL:
 
@@ -171,7 +185,7 @@ In `app.js`, update `WORKER_BASE` to your worker URL:
 const WORKER_BASE = 'https://your-worker-name.your-cf-subdomain.workers.dev';
 ```
 
-**6b. Update the CSP in `index.html`**
+**7b. Update the CSP in `index.html`**
 
 The Content Security Policy restricts which hosts the page can connect to. Update it to match your worker URL:
 
@@ -180,7 +194,7 @@ The Content Security Policy restricts which hosts the page can connect to. Updat
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: https://flagcdn.com; connect-src https://your-worker-name.your-cf-subdomain.workers.dev;">
 ```
 
-### 7. Deploy the frontend
+### 8. Deploy the frontend
 
 **Option A — Cloudflare Pages (recommended)**
 
@@ -204,7 +218,7 @@ python3 -m http.server 8080
 
 ## Programmatic API Access
 
-All three worker endpoints are accessible from any app via an `X-API-Key` header. The key is checked against the `WORKER_API_KEY` secret you set in step 5.
+All three worker endpoints are accessible from any app via an `X-API-Key` header. The key is checked against the `WORKER_API_KEY` secret you set in step 6.
 
 ### `GET /lookup` — full IP / domain scan
 
@@ -343,6 +357,8 @@ curl "https://your-worker-name.your-cf-subdomain.workers.dev/preview?ip=1.2.3.4"
 ```
 
 If the target has a cached scan (from an earlier `/lookup`), the card shows a qualitative verdict (Clean/Caution/Suspicious/Dangerous), the reason, country, and ISP. If there's no cached scan for it, it falls back to a generic "IP Scanner" card rather than triggering a fresh scan.
+
+> The frontend's Share link points at this path on **your own domain**, not the worker's `workers.dev` URL — see step 5 in Self-Hosting for the Cloudflare Route that makes that work.
 
 ---
 
