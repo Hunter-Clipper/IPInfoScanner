@@ -333,8 +333,7 @@ async function handleRootInject(request, url, env = {}) {
   const safeDesc  = escapeHtml(description);
   const safeUrl   = escapeHtml(url.toString());
 
-  const metaHtml = `
-<meta property="og:type" content="website">
+  const metaHtml = `<meta property="og:type" content="website">
 <meta property="og:title" content="${safeTitle}">
 <meta property="og:description" content="${safeDesc}">
 <meta property="og:url" content="${safeUrl}">
@@ -342,18 +341,22 @@ async function handleRootInject(request, url, env = {}) {
 <meta name="twitter:title" content="${safeTitle}">
 <meta name="twitter:description" content="${safeDesc}">
 <meta name="description" content="${safeDesc}">
-`;
+</head>`;
 
-  const transformed = new HTMLRewriter()
-    .on('head', { element(el) { el.append(metaHtml, { html: true }); } })
-    .on('title', { element(el) { el.setInnerContent(title); } })
-    .transform(originResponse);
+  // Buffer and string-replace rather than stream through HTMLRewriter — this
+  // page has a lot of multi-byte emoji, and HTMLRewriter's streaming parser
+  // corrupted them in testing even in content it never touched. A plain JS
+  // string, fully decoded via .text(), has no such byte-boundary risk.
+  const html = await originResponse.text();
+  const output = html
+    .replace('</head>', metaHtml)
+    .replace(/<title>.*?<\/title>/is, `<title>${safeTitle}</title>`);
 
-  // The injected content differs from what the origin's validators describe
-  // — drop them rather than serve inaccurate caching metadata.
-  transformed.headers.delete('ETag');
-  transformed.headers.delete('Last-Modified');
-  return transformed;
+  const headers = new Headers(originResponse.headers);
+  headers.delete('ETag');
+  headers.delete('Last-Modified');
+  headers.delete('Content-Length'); // body length just changed
+  return new Response(output, { status: originResponse.status, headers });
 }
 
 // ── /lookup ────────────────────────────────────────────────────────────────
