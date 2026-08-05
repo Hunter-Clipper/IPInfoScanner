@@ -159,20 +159,7 @@ function updateUrl(ip) {
   const u = new URL(window.location.href);
   u.searchParams.set('scan', ip);
   window.history.replaceState({}, '', u.toString());
-
-  // The copied/displayed share link points at /preview rather than this page
-  // directly — chat apps (Slack, Discord, iMessage) fetch shared links
-  // server-side to build a link-preview card, and this SPA renders
-  // client-side so a crawler sees an empty shell. /preview serves real Open
-  // Graph tags for the scan, then instantly redirects a human clicking it to
-  // this same page.
-  //
-  // Built on this page's own origin (not WORKER_BASE) so the shared link
-  // shows your domain, not the raw workers.dev URL. This requires a
-  // Cloudflare Workers Route binding "<your-domain>/preview*" to the worker
-  // — see the README's self-hosting guide.
-  const previewUrl = `${window.location.origin}/preview?ip=${encodeURIComponent(ip)}`;
-  $('share-url').textContent = previewUrl;
+  $('share-url').textContent = u.toString();
   $('share-bar').classList.add('visible');
 }
 $('fresh-scan-btn').addEventListener('click', () => lookup($('ip-input').value.trim(), true));

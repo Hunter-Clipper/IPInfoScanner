@@ -8,11 +8,13 @@
  *   GET  /lookup?ip=1.1.1.1  — full IP + domain intelligence lookup
  *   GET  /myip               — returns caller's real IP from CF headers
  *   POST /analyze            — AI analysis of scan results via Gemini
- *   GET  /preview?ip=1.1.1.1 — public OG/Twitter-Card unfurl page for shared
- *                              scan links; reads SCAN_CACHE_KV only, never
- *                              triggers a scan, and skips the origin/API-key
- *                              gate since chat-app link-unfurl bots send
- *                              neither
+ *
+ * Also serves the frontend's root page itself when bound to it via a
+ * Cloudflare Route (see ALLOWED_ORIGIN below): fetches the real page from
+ * the origin and injects real Open Graph/Twitter Card tags for the current
+ * "?scan=" target using HTMLRewriter, so shared links unfurl correctly in
+ * Slack/Discord/iMessage/etc. Public — skips the origin/API-key gate, since
+ * chat-app link-unfurl bots and plain top-level navigations send neither.
  *
  * Variables (set in Cloudflare Worker Settings → Variables & Secrets → Variables,
  * or in wrangler.toml under [vars] — these are config, not sensitive):
@@ -180,23 +182,30 @@ const DNSBL_LISTS = [
 ];
 
 
+function safeHostname(originStr) {
+  try { return new URL(originStr).hostname; } catch { return null; }
+}
+
 // ── Router ─────────────────────────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
     envByRequest.set(request, env);
     const url = new URL(request.url);
-    // Normalize a trailing slash (e.g. "/preview/" -> "/preview") so routing
-    // doesn't depend on exactly how an intermediary reverse proxy formats
-    // the forwarded path — some rewrite path-prefix rules always end in "/".
     const path = url.pathname.replace(/\/+$/, '') || '/';
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: buildCorsHeaders(request) });
     }
-    // /preview is deliberately public — social/chat link-unfurl bots carry no
-    // Origin, Referer, or API key. It only ever reads SCAN_CACHE_KV (never
-    // triggers a live scan), so exempting it from the origin gate can't be
-    // used to run free scans or rack up external API calls.
-    if (path !== '/preview' && !isAllowedOrigin(request) && !isValidApiKey(request, env)) {
+
+    // The root page is public static content — matched only when the request
+    // actually arrives via the configured frontend domain (a Cloudflare
+    // Route binds "<frontend-domain>/" to this worker), never via the
+    // worker's own workers.dev host, which has no origin behind it.
+    const isFrontendRoot = path === '/' && url.hostname === safeHostname(env.ALLOWED_ORIGIN);
+
+    // Real browsers loading the root page via a plain top-level navigation
+    // send no Origin/Referer/API key at all, so it can't go through the same
+    // auth gate as the API endpoints.
+    if (!isFrontendRoot && !isAllowedOrigin(request) && !isValidApiKey(request, env)) {
       return jsonResponse({ error: 'Forbidden' }, 403, request);
     }
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -211,8 +220,8 @@ export default {
           return jsonResponse({ error: 'Rate limit exceeded — max 10 AI analyses per hour.' }, 429, request);
         return handleAnalyze(request, env, ctx);
       }
-      if (path === '/myip')    return handleMyIp(request);
-      if (path === '/preview') return handlePreview(request, url, env);
+      if (path === '/myip')  return handleMyIp(request);
+      if (isFrontendRoot)    return handleRootInject(request, url, env);
       return jsonResponse({ error: 'Not found' }, 404, request);
     } catch (e) {
       return jsonResponse({ error: 'Worker error', message: e.message }, 500, request);
@@ -232,16 +241,15 @@ function handleMyIp(request) {
   return jsonResponse({ ip, workerColo: colo, workerCountry: country }, 200, request);
 }
 
-// ── /preview — Open Graph unfurl card for shared scan links ─────────────────
-// Chat/social apps (Slack, Discord, iMessage, etc.) fetch the shared URL
-// server-side to build a link preview. The SPA renders client-side, so a
-// crawler hitting the frontend directly sees an empty shell. This endpoint
-// serves a tiny server-rendered HTML page with real OG tags summarising the
-// cached scan, then immediately redirects real browsers (via meta refresh)
-// to the actual interactive result page.
-//
-// Reads SCAN_CACHE_KV only — never triggers a live scan — so this being
-// public/unauthenticated can't be used to run free scans.
+// ── Root page Open Graph injection ──────────────────────────────────────────
+// The frontend is static files — Apache serves byte-identical index.html no
+// matter what "?scan=" is, so chat/social link-unfurl bots (Slack, Discord,
+// iMessage, etc.) reading the raw HTML see no per-scan data. Rather than a
+// separate preview endpoint + redirect, this fetches the real page from the
+// origin and uses HTMLRewriter to inject real OG/Twitter tags into <head>
+// on the fly — real browsers get the exact same interactive app (body and
+// scripts pass through untouched), crawlers reading <head> see the correct
+// per-scan card, and it's all the same URL your users already share.
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -251,7 +259,7 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// Lightweight qualitative verdict for the preview card. Intentionally not
+// Lightweight qualitative verdict for the injected tags. Intentionally not
 // the same numeric algorithm as the frontend's risk score (that logic lives
 // client-side) — just enough signal for an at-a-glance summary.
 function summarizePreviewThreat(sources, isTorConfirmed) {
@@ -282,23 +290,19 @@ function summarizePreviewThreat(sources, isTorConfirmed) {
   return { level: 'Clean', emoji: CHECK, reason: 'No known threat indicators' };
 }
 
-async function handlePreview(request, url, env = {}) {
-  const input  = (url.searchParams.get('ip') || '').trim().substring(0, 253);
-  const origin = (env.ALLOWED_ORIGIN || '').replace(/\/$/, '');
-
+async function buildOgTags(scanInput, env) {
   let title       = 'IP Scanner — Free IP & Domain Intelligence';
   let description = 'Look up any IP, IPv6, or domain for geo, ASN, threat flags, DNSBL, VirusTotal, Shodan, WHOIS, and AI-powered threat analysis.';
-  const targetUrl = origin ? `${origin}${input ? `/?scan=${encodeURIComponent(input)}` : '/'}` : '';
 
-  if (input && env.SCAN_CACHE_KV) {
+  if (scanInput && env.SCAN_CACHE_KV) {
     try {
-      const cached = await env.SCAN_CACHE_KV.get(`scan:${input.toLowerCase()}`, { type: 'json' });
+      const cached = await env.SCAN_CACHE_KV.get(`scan:${scanInput.toLowerCase()}`, { type: 'json' });
       if (cached) {
         const { sources = {}, isTorConfirmed, isDomain, resolvedFrom, ip } = cached;
         const country = sources.ipapi?.country || sources.ipinfo?.country || null;
         const isp     = sources.ipapi?.isp || null;
         const verdict = summarizePreviewThreat(sources, isTorConfirmed);
-        const label   = isDomain ? (resolvedFrom || input) : (ip || input);
+        const label   = isDomain ? (resolvedFrom || scanInput) : (ip || scanInput);
 
         title = `${verdict.emoji} ${label} — ${verdict.level}`;
         description = [verdict.reason, country && `Location: ${country}`, isp && `ISP: ${isp}`]
@@ -306,34 +310,50 @@ async function handlePreview(request, url, env = {}) {
       }
     } catch { /* fail open to the generic card */ }
   }
+  return { title, description };
+}
 
+async function handleRootInject(request, url, env = {}) {
+  let originResponse;
+  try {
+    // Passes through to the zone's actual origin (Apache) — this is the
+    // standard Cloudflare pattern for modifying HTML in transit on a
+    // Route-bound worker; it never loops back into this worker itself.
+    originResponse = await fetch(request);
+  } catch (e) {
+    return new Response('Failed to reach origin', { status: 502 });
+  }
+
+  const contentType = originResponse.headers.get('Content-Type') || '';
+  if (!contentType.includes('text/html')) return originResponse;
+
+  const scanInput = (url.searchParams.get('scan') || '').trim().substring(0, 253);
+  const { title, description } = await buildOgTags(scanInput, env);
   const safeTitle = escapeHtml(title);
   const safeDesc  = escapeHtml(description);
-  const safeUrl   = escapeHtml(targetUrl);
+  const safeUrl   = escapeHtml(url.toString());
 
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>${safeTitle}</title>
-<meta name="description" content="${safeDesc}">
+  const metaHtml = `
 <meta property="og:type" content="website">
 <meta property="og:title" content="${safeTitle}">
 <meta property="og:description" content="${safeDesc}">
-${safeUrl ? `<meta property="og:url" content="${safeUrl}">\n<link rel="canonical" href="${safeUrl}">` : ''}
+<meta property="og:url" content="${safeUrl}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${safeTitle}">
 <meta name="twitter:description" content="${safeDesc}">
-${safeUrl ? `<meta http-equiv="refresh" content="0;url=${safeUrl}">` : ''}
-</head>
-<body>
-${safeUrl ? `<p>Redirecting to <a href="${safeUrl}">${safeUrl}</a>…</p>` : `<p>${safeTitle}</p>`}
-</body>
-</html>`;
+<meta name="description" content="${safeDesc}">
+`;
 
-  const headers = buildCorsHeaders(request);
-  headers['Content-Type'] = 'text/html; charset=utf-8';
-  return new Response(html, { status: 200, headers });
+  const transformed = new HTMLRewriter()
+    .on('head', { element(el) { el.append(metaHtml, { html: true }); } })
+    .on('title', { element(el) { el.setInnerContent(title); } })
+    .transform(originResponse);
+
+  // The injected content differs from what the origin's validators describe
+  // — drop them rather than serve inaccurate caching metadata.
+  transformed.headers.delete('ETag');
+  transformed.headers.delete('Last-Modified');
+  return transformed;
 }
 
 // ── /lookup ────────────────────────────────────────────────────────────────

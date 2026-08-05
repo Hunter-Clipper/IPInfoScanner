@@ -145,19 +145,21 @@ wrangler deploy
 
 Your worker is now live at `https://your-worker-name.your-cf-subdomain.workers.dev`.
 
-### 5. Bind `/preview` to your domain
+### 5. Bind your root page to the worker (for link previews)
 
-The Share button copies a link built from the page's own origin, e.g. `https://ipscanner.yourdomain.com/preview?ip=1.2.3.4` — not the worker's `workers.dev` URL — so links pasted into Slack/Discord/iMessage show your domain. That only works if `/preview` on your domain actually reaches the worker, which needs one more binding:
+The frontend is static files, so Apache serves byte-identical `index.html` no matter what `?scan=` is in the URL — chat/social apps (Slack, Discord, iMessage) fetching a shared link server-side see no per-scan data, and the link unfurls into a blank card. To fix this, the worker can inject real Open Graph tags into the page on the fly — but only for requests that actually reach it, which needs one binding:
 
 In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settings → Domains & Routes → Add → Route**, add:
 
 ```
-ipscanner.yourdomain.com/preview*
+ipscanner.yourdomain.com/
 ```
 
-(use whatever domain your frontend is actually served from). This routes only that one path pattern to the worker — every other path on your domain keeps being served by whatever already hosts your static frontend, untouched.
+(the exact root path only, on whatever domain your frontend is actually served from — not a wildcard). This routes only the root page to the worker; every other path (`/app.js`, `/style.css`, etc.) keeps being served directly by whatever already hosts your static frontend, untouched.
 
-> This step is required, not optional — without it, shared links will 404 when opened, since the frontend always builds the Share link from its own origin now. If your zone has Cloudflare's Bot Fight Mode, WAF managed rules, or Turnstile enabled, make sure known link-unfurl bots (Slackbot, Discordbot, facebookexternalhit, etc.) — or this path specifically — are allowlisted, or they won't be able to fetch the preview to build the card.
+The worker fetches the real page from your origin and uses `HTMLRewriter` to add `og:title`/`og:description`/etc. into `<head>` based on the cached scan for `?scan=`, then streams the rest of the page through unmodified — so real visitors get the exact same interactive app, and shared links unfurl correctly. If there's no cached scan for the target, it falls back to a generic "IP Scanner" description rather than triggering a fresh scan.
+
+> Optional — skip it and the site still works exactly as it does today, just without rich link previews. If your zone has Cloudflare's Bot Fight Mode, WAF managed rules, or Turnstile enabled, make sure known link-unfurl bots (Slackbot, Discordbot, facebookexternalhit, etc.) are allowlisted, or they won't be able to fetch the page to build the card.
 
 ### 6. Add worker secrets
 
@@ -345,20 +347,6 @@ curl -H "X-API-Key: your-key" \
 ```json
 { "ip": "203.0.113.42" }
 ```
-
-### `GET /preview` — Open Graph link-unfurl card
-
-Serves a server-rendered HTML page with Open Graph/Twitter Card meta tags summarising a cached scan, then immediately redirects browsers to the real result page. This is what the frontend's **Share → Copy** button copies, so links pasted into Slack, Discord, iMessage, etc. unfurl into a rich preview instead of a blank card.
-
-Deliberately public and unauthenticated — no `X-API-Key` or Origin/Referer check — since chat-app link-unfurl bots send neither. It only ever reads `SCAN_CACHE_KV`; it never triggers a live scan, so this can't be used to run free scans against the intelligence sources.
-
-```bash
-curl "https://your-worker-name.your-cf-subdomain.workers.dev/preview?ip=1.2.3.4"
-```
-
-If the target has a cached scan (from an earlier `/lookup`), the card shows a qualitative verdict (Clean/Caution/Suspicious/Dangerous), the reason, country, and ISP. If there's no cached scan for it, it falls back to a generic "IP Scanner" card rather than triggering a fresh scan.
-
-> The frontend's Share link points at this path on **your own domain**, not the worker's `workers.dev` URL — see step 5 in Self-Hosting for the Cloudflare Route that makes that work.
 
 ---
 
