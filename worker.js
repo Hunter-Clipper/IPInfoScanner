@@ -8,6 +8,11 @@
  *   GET  /lookup?ip=1.1.1.1  — full IP + domain intelligence lookup
  *   GET  /myip               — returns caller's real IP from CF headers
  *   POST /analyze            — AI analysis of scan results via Gemini
+ *   GET  /preview?ip=1.1.1.1 — public OG/Twitter-Card unfurl page for shared
+ *                              scan links; reads SCAN_CACHE_KV only, never
+ *                              triggers a scan, and skips the origin/API-key
+ *                              gate since chat-app link-unfurl bots send
+ *                              neither
  *
  * Variables (set in Cloudflare Worker Settings → Variables & Secrets → Variables,
  * or in wrangler.toml under [vars] — these are config, not sensitive):
@@ -179,15 +184,19 @@ const DNSBL_LISTS = [
 export default {
   async fetch(request, env, ctx) {
     envByRequest.set(request, env);
+    const url  = new URL(request.url);
+    const path = url.pathname;
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: buildCorsHeaders(request) });
     }
-    if (!isAllowedOrigin(request) && !isValidApiKey(request, env)) {
+    // /preview is deliberately public — social/chat link-unfurl bots carry no
+    // Origin, Referer, or API key. It only ever reads SCAN_CACHE_KV (never
+    // triggers a live scan), so exempting it from the origin gate can't be
+    // used to run free scans or rack up external API calls.
+    if (path !== '/preview' && !isAllowedOrigin(request) && !isValidApiKey(request, env)) {
       return jsonResponse({ error: 'Forbidden' }, 403, request);
     }
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
-    const url  = new URL(request.url);
-    const path = url.pathname;
     try {
       if (path === '/lookup') {
         if (!await checkRateLimit(clientIp, env.RATE_LIMIT_KV, RATE_LIMIT_LOOKUP, 'lookup'))
@@ -200,6 +209,7 @@ export default {
         return handleAnalyze(request, env, ctx);
       }
       if (path === '/myip')    return handleMyIp(request);
+      if (path === '/preview') return handlePreview(request, url, env);
       return jsonResponse({ error: 'Not found' }, 404, request);
     } catch (e) {
       return jsonResponse({ error: 'Worker error', message: e.message }, 500, request);
@@ -217,6 +227,102 @@ function handleMyIp(request) {
   const colo   = request.cf?.colo   || 'Unknown';
   const country= request.cf?.country || 'Unknown';
   return jsonResponse({ ip, workerColo: colo, workerCountry: country }, 200, request);
+}
+
+// ── /preview — Open Graph unfurl card for shared scan links ─────────────────
+// Chat/social apps (Slack, Discord, iMessage, etc.) fetch the shared URL
+// server-side to build a link preview. The SPA renders client-side, so a
+// crawler hitting the frontend directly sees an empty shell. This endpoint
+// serves a tiny server-rendered HTML page with real OG tags summarising the
+// cached scan, then immediately redirects real browsers (via meta refresh)
+// to the actual interactive result page.
+//
+// Reads SCAN_CACHE_KV only — never triggers a live scan — so this being
+// public/unauthenticated can't be used to run free scans.
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Lightweight qualitative verdict for the preview card. Intentionally not
+// the same numeric algorithm as the frontend's risk score (that logic lives
+// client-side) — just enough signal for an at-a-glance summary.
+function summarizePreviewThreat(sources, isTorConfirmed) {
+  const vt       = sources?.virustotal?.data?.attributes?.last_analysis_stats || {};
+  const vtMal    = (vt.malicious || 0) + (vt.suspicious || 0);
+  const vtDomain = sources?.vtDomain && !sources.vtDomain.error ? sources.vtDomain : null;
+  const vtDomMal = vtDomain ? (vtDomain.malicious || 0) + (vtDomain.suspicious || 0) : 0;
+  const dnsblHits = sources?.dnsbl?.listed || 0;
+  const pcType    = (Object.values(sources?.proxycheck || {})[0]?.type || '').toLowerCase();
+  const isHosting = sources?.ipapi?.hosting === true;
+  const worstVt   = Math.max(vtMal, vtDomMal);
+
+  if (isTorConfirmed)  return { level: 'Dangerous',  emoji: '🚨', reason: 'Confirmed Tor exit node' };
+  if (worstVt >= 2)    return { level: 'Suspicious', emoji: '⚠️', reason: `Flagged by ${worstVt} VirusTotal engines` };
+  if (dnsblHits > 0)   return { level: 'Suspicious', emoji: '⚠️', reason: `Listed on ${dnsblHits} blacklist${dnsblHits > 1 ? 's' : ''}` };
+  if (worstVt > 0)     return { level: 'Caution',    emoji: '🔔', reason: 'Flagged by 1 VirusTotal engine' };
+  if (pcType.includes('vpn'))   return { level: 'Caution', emoji: '🔔', reason: 'VPN provider detected' };
+  if (pcType.includes('proxy')) return { level: 'Caution', emoji: '🔔', reason: 'Proxy / anonymiser detected' };
+  if (isHosting)                return { level: 'Caution', emoji: '🔔', reason: 'Data centre / hosting ASN' };
+  return { level: 'Clean', emoji: '✅', reason: 'No known threat indicators' };
+}
+
+async function handlePreview(request, url, env = {}) {
+  const input  = (url.searchParams.get('ip') || '').trim().substring(0, 253);
+  const origin = (env.ALLOWED_ORIGIN || '').replace(/\/$/, '');
+
+  let title       = 'IP Scanner — Free IP & Domain Intelligence';
+  let description = 'Look up any IP, IPv6, or domain for geo, ASN, threat flags, DNSBL, VirusTotal, Shodan, WHOIS, and AI-powered threat analysis.';
+  const targetUrl = origin ? `${origin}${input ? `/?scan=${encodeURIComponent(input)}` : '/'}` : '';
+
+  if (input && env.SCAN_CACHE_KV) {
+    try {
+      const cached = await env.SCAN_CACHE_KV.get(`scan:${input.toLowerCase()}`, { type: 'json' });
+      if (cached) {
+        const { sources = {}, isTorConfirmed, isDomain, resolvedFrom, ip } = cached;
+        const country = sources.ipapi?.country || sources.ipinfo?.country || null;
+        const isp     = sources.ipapi?.isp || null;
+        const verdict = summarizePreviewThreat(sources, isTorConfirmed);
+        const label   = isDomain ? (resolvedFrom || input) : (ip || input);
+
+        title = `${verdict.emoji} ${label} — ${verdict.level}`;
+        description = [verdict.reason, country && `Location: ${country}`, isp && `ISP: ${isp}`]
+          .filter(Boolean).join(' · ');
+      }
+    } catch { /* fail open to the generic card */ }
+  }
+
+  const safeTitle = escapeHtml(title);
+  const safeDesc  = escapeHtml(description);
+  const safeUrl   = escapeHtml(targetUrl);
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${safeTitle}</title>
+<meta name="description" content="${safeDesc}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${safeTitle}">
+<meta property="og:description" content="${safeDesc}">
+${safeUrl ? `<meta property="og:url" content="${safeUrl}">\n<link rel="canonical" href="${safeUrl}">` : ''}
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${safeTitle}">
+<meta name="twitter:description" content="${safeDesc}">
+${safeUrl ? `<meta http-equiv="refresh" content="0;url=${safeUrl}">` : ''}
+</head>
+<body>
+${safeUrl ? `<p>Redirecting to <a href="${safeUrl}">${safeUrl}</a>…</p>` : `<p>${safeTitle}</p>`}
+</body>
+</html>`;
+
+  const headers = buildCorsHeaders(request);
+  headers['Content-Type'] = 'text/html; charset=utf-8';
+  return new Response(html, { status: 200, headers });
 }
 
 // ── /lookup ────────────────────────────────────────────────────────────────

@@ -332,6 +332,18 @@ curl -H "X-API-Key: your-key" \
 { "ip": "203.0.113.42" }
 ```
 
+### `GET /preview` — Open Graph link-unfurl card
+
+Serves a server-rendered HTML page with Open Graph/Twitter Card meta tags summarising a cached scan, then immediately redirects browsers to the real result page. This is what the frontend's **Share → Copy** button copies, so links pasted into Slack, Discord, iMessage, etc. unfurl into a rich preview instead of a blank card.
+
+Deliberately public and unauthenticated — no `X-API-Key` or Origin/Referer check — since chat-app link-unfurl bots send neither. It only ever reads `SCAN_CACHE_KV`; it never triggers a live scan, so this can't be used to run free scans against the intelligence sources.
+
+```bash
+curl "https://your-worker-name.your-cf-subdomain.workers.dev/preview?ip=1.2.3.4"
+```
+
+If the target has a cached scan (from an earlier `/lookup`), the card shows a qualitative verdict (Clean/Caution/Suspicious/Dangerous), the reason, country, and ISP. If there's no cached scan for it, it falls back to a generic "IP Scanner" card rather than triggering a fresh scan.
+
 ---
 
 ## Rate Limits

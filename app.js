@@ -159,7 +159,15 @@ function updateUrl(ip) {
   const u = new URL(window.location.href);
   u.searchParams.set('scan', ip);
   window.history.replaceState({}, '', u.toString());
-  $('share-url').textContent = u.toString();
+
+  // The copied/displayed share link points at the worker's /preview endpoint
+  // rather than this page directly — chat apps (Slack, Discord, iMessage)
+  // fetch shared links server-side to build a link-preview card, and this
+  // SPA renders client-side so a crawler sees an empty shell. /preview
+  // serves real Open Graph tags for the scan, then instantly redirects a
+  // human clicking it to this same page.
+  const previewUrl = `${WORKER_BASE}/preview?ip=${encodeURIComponent(ip)}`;
+  $('share-url').textContent = previewUrl;
   $('share-bar').classList.add('visible');
 }
 $('fresh-scan-btn').addEventListener('click', () => lookup($('ip-input').value.trim(), true));
