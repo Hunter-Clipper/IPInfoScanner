@@ -25,8 +25,6 @@ $('btn-light').addEventListener('click', () => applyTheme('light'));
 function getKey(n)      { try { return localStorage.getItem(STORAGE_KEYS[n]) || ''; } catch { return ''; } }
 function setKey(n, val) { try { val ? localStorage.setItem(STORAGE_KEYS[n], val) : localStorage.removeItem(STORAGE_KEYS[n]); } catch {} }
 
-function refreshPills() {}
-
 // ── Scan History ───────────────────────────────────────────────────────────
 function getHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
 function saveHistory(h) { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch {} }
@@ -132,12 +130,16 @@ $('settings-btn').addEventListener('click', openModal);
 $('modal-cancel').addEventListener('click', closeModal);
 $('modal-overlay').addEventListener('click', e => { if (e.target === $('modal-overlay')) closeModal(); });
 $('modal-save').addEventListener('click', () => {
-  ['vt','shodan','ipinfo','proxycheck'].forEach(n => setKey(n, $('k-' + n).value.trim()));
-  refreshPills(); closeModal();
+  ['vt','shodan','ipinfo','proxycheck'].forEach(n => {
+    setKey(n, $('k-' + n).value.trim());
+    $('k-' + n).classList.toggle('has-value', !!$('k-' + n).value.trim());
+  });
+  const btn = $('modal-save');
+  btn.textContent = 'Saved!';
+  setTimeout(() => { btn.textContent = 'Save Keys'; closeModal(); }, 700);
 });
 $('modal-clear-all').addEventListener('click', () => {
   ['vt','shodan','ipinfo','proxycheck'].forEach(n => { setKey(n,''); $('k-'+n).value=''; $('k-'+n).classList.remove('has-value'); });
-  refreshPills();
 });
 document.querySelectorAll('.eye-btn').forEach(btn => {
   btn.addEventListener('click', () => { const i = $(btn.dataset.target); i.type = i.type==='password'?'text':'password'; });
@@ -186,6 +188,10 @@ async function lookup(ip, fresh = false) {
   setLoading(true);
   $('results').classList.remove('visible');
   $('empty').style.display = 'none';
+  // Reset in case a previous scan left an error icon/message here — otherwise
+  // it persists indefinitely the next time the empty state is shown.
+  $('empty').querySelector('.empty-icon').textContent = '🔍';
+  $('empty').querySelector('.empty-text').textContent = 'enter an ip or domain to begin scanning';
   $('cache-bar').classList.remove('visible');
   document.title = 'IP Scanner';
   $('sources').style.display = 'none';
@@ -477,7 +483,7 @@ function renderWhoisCards(whois) {
     kv('Handle', v(whois.handle)),
     kv('Name', v(whois.name)),
     kv('Network', v(whois.network)),
-    kv('IP Range', whois.startAddress&&whois.endAddress?`${whois.startAddress} – ${whois.endAddress}`:'—'),
+    kv('IP Range', whois.startAddress&&whois.endAddress?`${esc(whois.startAddress)} – ${esc(whois.endAddress)}`:'—'),
     kv('Country', v(whois.country)),
     kv('Type', v(whois.type)),
   ].join('');
@@ -487,7 +493,7 @@ function renderWhoisCards(whois) {
     kv('Tech Contact', v(whois.techContact)),
     kv('Registered', fmtDate(whois.registered)),
     kv('Last Changed', fmtDate(whois.lastChanged)),
-    whois.remarks ? kv('Remarks', `<span style="font-size:.67rem">${whois.remarks.substring(0,80)}${whois.remarks.length>80?'…':''}</span>`) : '',
+    whois.remarks ? kv('Remarks', `<span style="font-size:.67rem">${esc(whois.remarks.substring(0,80))}${whois.remarks.length>80?'…':''}</span>`) : '',
   ].join('');
 }
 
@@ -506,7 +512,7 @@ function renderShodanCard(shodan) {
   }
 
   const vulnList = shodan.vulns.length
-    ? shodan.vulns.slice(0,10).map(v => `<span class="shodan-vuln"><a href="https://nvd.nist.gov/vuln/detail/${v}" target="_blank" style="color:inherit">${v}</a></span>`).join('')
+    ? shodan.vulns.slice(0,10).map(cve => `<span class="shodan-vuln"><a href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(cve)}" target="_blank" style="color:inherit">${esc(cve)}</a></span>`).join('')
     : '';
 
   const services = (shodan.services || []).map(s =>
@@ -527,8 +533,8 @@ function renderShodanCard(shodan) {
       ${kv('OS', v(shodan.os))}
       ${kv('Last Scan', fmtDate(shodan.lastUpdate))}
       ${kv('Open Ports', shodan.ports.slice(0,12).join(', ')+(shodan.ports.length>12?'…':'') || '—')}
-      ${shodan.hostnames.length ? kv('Hostnames', shodan.hostnames.slice(0,3).join(', ')) : ''}
-      ${shodan.tags.length ? kv('Tags', shodan.tags.map(t=>`<span class="tag tag-blue">${t}</span>`).join(' ')) : ''}
+      ${shodan.hostnames.length ? kv('Hostnames', shodan.hostnames.slice(0,3).map(esc).join(', ')) : ''}
+      ${shodan.tags.length ? kv('Tags', shodan.tags.map(t=>`<span class="tag tag-blue">${esc(t)}</span>`).join(' ')) : ''}
     </div>
     ${vulnList ? `<div style="margin-bottom:.75rem"><div class="vt-label">CVEs / Vulnerabilities</div>${vulnList}</div>` : ''}
     ${services ? `<div class="vt-label">Services & Banners</div><div class="shodan-services">${services}</div>` : ''}
@@ -565,16 +571,16 @@ function renderDnsblCard(dnsbl, ip) {
     ${listed.length ? `
       <div class="vt-label" style="color:var(--red)">⚠ Listed on ${listed.length} blacklist${listed.length>1?'s':''}</div>
       <div class="dnsbl-grid">
-        ${listed.map(l=>`<div class="dnsbl-item listed"><div class="dnsbl-dot"></div><span>${l.name}</span><span style="margin-left:auto;font-size:.6rem;opacity:.75">${l.codeDesc||l.returnCode||''}</span></div>`).join('')}
+        ${listed.map(l=>`<div class="dnsbl-item listed"><div class="dnsbl-dot"></div><span>${esc(l.name)}</span><span style="margin-left:auto;font-size:.6rem;opacity:.75">${esc(l.codeDesc||l.returnCode||'')}</span></div>`).join('')}
       </div>
       <div class="vt-label" style="margin-top:.85rem">Clean lists</div>` : `<div class="vt-label" style="color:var(--green)">✓ Not listed on any checked blacklist</div>`}
     <div class="dnsbl-grid">
-      ${clean.map(l=>`<div class="dnsbl-item clean"><div class="dnsbl-dot"></div>${l.name}</div>`).join('')}
+      ${clean.map(l=>`<div class="dnsbl-item clean"><div class="dnsbl-dot"></div>${esc(l.name)}</div>`).join('')}
     </div>
     ${errored.length ? `
       <div class="vt-label" style="margin-top:.85rem">Unavailable / errored</div>
       <div class="dnsbl-grid">
-        ${errored.map(l=>`<div class="dnsbl-item error" title="${l.errorCode?'Blocked — requires dedicated DNS resolver':l.timeout?'Timeout':'Query failed'}"><div class="dnsbl-dot"></div>${l.name}${l.timeout?' (timeout)':''}</div>`).join('')}
+        ${errored.map(l=>`<div class="dnsbl-item error" title="${l.errorCode?'Blocked — requires dedicated DNS resolver':l.timeout?'Timeout':'Query failed'}"><div class="dnsbl-dot"></div>${esc(l.name)}${l.timeout?' (timeout)':''}</div>`).join('')}
       </div>
       <div style="margin-top:.5rem;font-size:.67rem;color:var(--text-faint);font-family:'JetBrains Mono',monospace">Some lists block public DNS resolvers (Cloudflare DoH) or were unreachable. Their results are excluded from the count.</div>` : ''}`;
 }
@@ -613,7 +619,7 @@ function renderVtCard(vtData, ip) {
     ${flagged.length?`<div class="vt-label">Flagged by ${flagged.length} engine${flagged.length>1?'s':''}</div><div class="vt-engines-grid">${flagged.map(eng).join('')}</div>`:''}
     ${clean.length?`<div class="vt-label">Sample clean engines</div><div class="vt-engines-grid">${clean.map(eng).join('')}</div>`:''}
     <div style="margin-top:.75rem;font-size:.67rem;color:var(--text-faint)">
-      <a href="https://www.virustotal.com/gui/ip-address/${ip}" target="_blank" style="color:var(--accent)">Full report on VirusTotal ↗</a>
+      <a href="https://www.virustotal.com/gui/ip-address/${encodeURIComponent(ip)}" target="_blank" style="color:var(--accent)">Full report on VirusTotal ↗</a>
     </div>`;
 }
 
@@ -648,7 +654,7 @@ function renderDomainWhoisCard(dw, domain) {
     const days = Math.floor((Date.now() - new Date(dw.registered)) / 86400000);
     ageStr = days > 365 ? Math.floor(days/365) + ' yr' + (Math.floor(days/365)>1?'s':'') : days + ' days';
   }
-  const nsStr = dw.nameservers?.slice(0,3).join(', ') || '—';
+  const nsStr = dw.nameservers?.slice(0,3).map(esc).join(', ') || '—';
   card.innerHTML = cardHead('🌐', 'Domain WHOIS') + [
     kv('Domain',      v(dw.domain || domain)),
     kv('Registrar',   v(dw.registrar)),
@@ -677,8 +683,8 @@ function renderDomainVtCard(vt, domain) {
 
   try {
     const total    = (vt.malicious||0)+(vt.suspicious||0)+(vt.harmless||0)+(vt.undetected||0);
-    const cats     = Object.values(vt.categories||{}).slice(0,3).join(', ') || '—';
-    const ranks    = Object.entries(vt.popularityRanks||{}).slice(0,2).map(function(e){return e[0]+':#'+e[1].rank;}).join(', ') || '—';
+    const cats     = Object.values(vt.categories||{}).slice(0,3).map(esc).join(', ') || '—';
+    const ranks    = Object.entries(vt.popularityRanks||{}).slice(0,2).map(function(e){return esc(e[0])+':#'+esc(String(e[1].rank));}).join(', ') || '—';
 
     let certValid = '—';
     try {
@@ -704,10 +710,10 @@ function renderDomainVtCard(vt, domain) {
     html += kv('SSL Issuer', v(vt.lastHttpsCert?.issuer));
     html += kv('SSL Expires', certValid);
     if (vt.tags && vt.tags.length) {
-      html += kv('Tags', vt.tags.slice(0,4).map(function(t){return '<span class="tag tag-gray">'+t+'</span>';}).join(' '));
+      html += kv('Tags', vt.tags.slice(0,4).map(function(t){return '<span class="tag tag-gray">'+esc(t)+'</span>';}).join(' '));
     }
     html += '<div style="margin-top:.75rem;font-size:.67rem;color:var(--text-faint)">';
-    html += '<a href="https://www.virustotal.com/gui/domain/' + domain + '" target="_blank" style="color:var(--accent)">Full domain report on VirusTotal ↗</a>';
+    html += '<a href="https://www.virustotal.com/gui/domain/' + encodeURIComponent(domain) + '" target="_blank" style="color:var(--accent)">Full domain report on VirusTotal ↗</a>';
     html += '</div>';
     card.innerHTML = html;
   } catch(e) {
@@ -862,7 +868,6 @@ $('raw-copy').addEventListener('click', (e) => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
-refreshPills();
 renderHistory();
 (function(){
   const ip = new URLSearchParams(window.location.search).get('scan');
