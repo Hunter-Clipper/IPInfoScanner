@@ -264,14 +264,22 @@ function summarizePreviewThreat(sources, isTorConfirmed) {
   const isHosting = sources?.ipapi?.hosting === true;
   const worstVt   = Math.max(vtMal, vtDomMal);
 
-  if (isTorConfirmed)  return { level: 'Dangerous',  emoji: '🚨', reason: 'Confirmed Tor exit node' };
-  if (worstVt >= 2)    return { level: 'Suspicious', emoji: '⚠️', reason: `Flagged by ${worstVt} VirusTotal engines` };
-  if (dnsblHits > 0)   return { level: 'Suspicious', emoji: '⚠️', reason: `Listed on ${dnsblHits} blacklist${dnsblHits > 1 ? 's' : ''}` };
-  if (worstVt > 0)     return { level: 'Caution',    emoji: '🔔', reason: 'Flagged by 1 VirusTotal engine' };
-  if (pcType.includes('vpn'))   return { level: 'Caution', emoji: '🔔', reason: 'VPN provider detected' };
-  if (pcType.includes('proxy')) return { level: 'Caution', emoji: '🔔', reason: 'Proxy / anonymiser detected' };
-  if (isHosting)                return { level: 'Caution', emoji: '🔔', reason: 'Data centre / hosting ASN' };
-  return { level: 'Clean', emoji: '✅', reason: 'No known threat indicators' };
+  // Written as \u{...} escapes rather than literal emoji so the source stays
+  // pure ASCII — some deploy paths (e.g. pasting into a web-based editor)
+  // mangle astral-plane characters that need a UTF-16 surrogate pair.
+  const ROTATING_LIGHT = '\u{1F6A8}'; // 🚨
+  const WARNING        = '\u{26A0}\u{FE0F}'; // ⚠️
+  const BELL           = '\u{1F514}'; // 🔔
+  const CHECK          = '\u{2705}'; // ✅
+
+  if (isTorConfirmed)  return { level: 'Dangerous',  emoji: ROTATING_LIGHT, reason: 'Confirmed Tor exit node' };
+  if (worstVt >= 2)    return { level: 'Suspicious', emoji: WARNING, reason: `Flagged by ${worstVt} VirusTotal engines` };
+  if (dnsblHits > 0)   return { level: 'Suspicious', emoji: WARNING, reason: `Listed on ${dnsblHits} blacklist${dnsblHits > 1 ? 's' : ''}` };
+  if (worstVt > 0)     return { level: 'Caution',    emoji: BELL, reason: 'Flagged by 1 VirusTotal engine' };
+  if (pcType.includes('vpn'))   return { level: 'Caution', emoji: BELL, reason: 'VPN provider detected' };
+  if (pcType.includes('proxy')) return { level: 'Caution', emoji: BELL, reason: 'Proxy / anonymiser detected' };
+  if (isHosting)                return { level: 'Caution', emoji: BELL, reason: 'Data centre / hosting ASN' };
+  return { level: 'Clean', emoji: CHECK, reason: 'No known threat indicators' };
 }
 
 async function handlePreview(request, url, env = {}) {
