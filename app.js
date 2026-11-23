@@ -258,8 +258,11 @@ async function lookup(ip, fresh = false) {
   const timezone    = v(ipapi.timezone    || ipinfo.timezone);
   const isp         = v(ipapi.isp         || pc.provider);
   const org         = v(ipapi.org         || ipinfo.org);
-  const asnNum      = v(ipapi.as?.split(' ')[0] || pc.asn || ipinfo.org?.split(' ')[0]);
-  const asnOrg      = v(pc.organisation   || ipapi.as || ipinfo.org);
+  const iiMax       = ipinfo.max || null;       // present with paid IPinfo Max token
+  const iiPriv      = iiMax?.anonymous || null;
+  const iiAsn       = iiMax?.as || null;
+  const asnNum      = v(iiAsn?.asn || ipapi.as?.split(' ')[0] || pc.asn || ipinfo.org?.split(' ')[0]);
+  const asnOrg      = v(iiAsn?.name || pc.organisation || ipapi.as || ipinfo.org);
   const rdns        = v(ipapi.reverse     || pc.hostname || ipinfo.hostname);
   const ipVer       = resolvedIp.includes(':') ? 'IPv6' : 'IPv4';
   const postal      = v(ipapi.zip         || ipinfo.postal);
@@ -267,12 +270,12 @@ async function lookup(ip, fresh = false) {
   const pcrisk      = parseInt(pc.risk ?? 0) || 0;
 
   const pcLow      = pcType.toLowerCase();
-  const isTor      = isTorConfirmed || pcLow.includes('tor') || (ipapis?.security?.tor===true);
-  const isVpn      = !isTor && (pcLow.includes('vpn') || (ipapi.proxy===true && !pcLow.includes('proxy')));
-  const isProxy    = !isTor && !isVpn && (pcLow.includes('proxy') || pcType==='PBL' || pcType==='CBL' || ipapi.proxy===true);
-  const isHosting  = ipapi.hosting===true || pcType==='DCH' || pcLow.includes('hosting');
+  const isTor      = isTorConfirmed || iiPriv?.is_tor===true || pcLow.includes('tor') || (ipapis?.security?.tor===true);
+  const isVpn      = !isTor && (iiPriv?.is_vpn===true || pcLow.includes('vpn') || (ipapi.proxy===true && !pcLow.includes('proxy')));
+  const isProxy    = !isTor && !isVpn && ((iiPriv?.is_proxy===true || iiPriv?.is_res_proxy===true) || pcLow.includes('proxy') || pcType==='PBL' || pcType==='CBL' || ipapi.proxy===true);
+  const isHosting  = iiMax?.is_hosting===true || ipapi.hosting===true || pcType==='DCH' || pcLow.includes('hosting');
   const isMobile   = ipapi.mobile===true;
-  const isRelay    = pcLow.includes('relay');
+  const isRelay    = iiPriv?.is_relay===true || pcLow.includes('relay');
   const isSatellite= pcLow.includes('satellite');
   const isAnon     = isVpn || isTor || isProxy;
   const isBogon    = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|::1$|fc|fd)/i.test(resolvedIp);
@@ -388,6 +391,34 @@ async function lookup(ip, fresh = false) {
       kv('Timezone', timezone),
       kv('Postal Code', postal),
     ].join('');
+
+
+    // IPinfo Max-plan intelligence (only when the Max API returned data)
+    $('ipinfo-section').style.display = iiMax ? '' : 'none';
+    if (iiMax) {
+      const yn = (b) => b===true ? tag('Yes','amber') : b===false ? tag('No','green') : '—';
+      const mob = iiMax.mobile && Object.keys(iiMax.mobile).length ? iiMax.mobile : null;
+      const geo = iiMax.geo || {};
+      $('c-ipinfo').innerHTML = cardHead('🧭','IPinfo Intelligence (Max)') + [
+        kv('Anonymous', yn(iiMax.is_anonymous)),
+        kv('VPN', yn(iiPriv?.is_vpn)),
+        kv('Proxy', yn(iiPriv?.is_proxy)),
+        kv('Residential Proxy', yn(iiPriv?.is_res_proxy)),
+        kv('Tor', yn(iiPriv?.is_tor)),
+        kv('Relay', yn(iiPriv?.is_relay)),
+        kv('Hosting', yn(iiMax.is_hosting)),
+        kv('Anycast', yn(iiMax.is_anycast)),
+        kv('Satellite', yn(iiMax.is_satellite)),
+        iiPriv?.name ? kv('Privacy Service', v(iiPriv.name)) : '',
+        iiPriv?.percent_days_seen != null ? kv('Res. Proxy Seen', `${v(iiPriv.percent_days_seen)}% of last 7 days` + (iiPriv.last_seen ? ` (last ${v(iiPriv.last_seen)})` : '')) : '',
+        iiAsn ? kv('ASN Type', v(iiAsn.type)) : '',
+        iiAsn?.domain ? kv('ASN Domain', v(iiAsn.domain)) : '',
+        mob ? kv('Mobile Carrier', v(mob.name) + (mob.mcc ? ` (${v(mob.mcc)}/${v(mob.mnc)})` : '')) : '',
+        geo.radius != null ? kv('Geo Accuracy Radius', `${v(geo.radius)} km`) : '',
+        geo.continent ? kv('Continent', v(geo.continent)) : '',
+        iiMax.place?.name ? kv('Place', v(iiMax.place.name) + (iiMax.place.category ? ` (${v(iiMax.place.category)})` : '')) : '',
+      ].join('');
+    }
 
     // ASN
     $('c-asn').innerHTML = cardHead('🔌','Network / ASN') + [
