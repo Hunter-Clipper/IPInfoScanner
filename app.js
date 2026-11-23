@@ -1,5 +1,24 @@
 // ── Config ─────────────────────────────────────────────────────────────────
-const WORKER_BASE  = 'https://ipscan.hunter-clipper.workers.dev';
+// ── Worker location ────────────────────────────────────────────────────────
+// Replace the placeholder below with your deployed Cloudflare Worker URL, or
+// (preferred) leave it and create an uncommitted config.js containing:
+//   window.IPSCAN_WORKER_URL = 'https://<your-worker>.<your-subdomain>.workers.dev';
+// Resolution order:
+//   1. window.IPSCAN_WORKER_URL (config.js)
+//   2. WORKER_URL_PLACEHOLDER, if you edited it into a real URL
+//   3. Local worker (`wrangler dev`) when the page is served from localhost
+//   4. Nothing configured -> scans show instructions for creating a remote worker
+const WORKER_URL_PLACEHOLDER = 'https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev';
+const LOCAL_WORKER_URL       = 'http://127.0.0.1:8787';
+const WORKER_BASE = (() => {
+  const strip = u => String(u).replace(/\/+$/, '');
+  if (window.IPSCAN_WORKER_URL) return strip(window.IPSCAN_WORKER_URL);
+  if (!WORKER_URL_PLACEHOLDER.includes('YOUR-WORKER')) return strip(WORKER_URL_PLACEHOLDER);
+  if (['localhost','127.0.0.1','[::1]'].includes(location.hostname)) return LOCAL_WORKER_URL;
+  return '';
+})();
+const WORKER_IS_LOCAL = WORKER_BASE === LOCAL_WORKER_URL;
+const WORKER_SETUP_MSG = 'No worker configured. Run one locally with `wrangler dev` (serve this page from localhost), or deploy one with `wrangler deploy` and set window.IPSCAN_WORKER_URL in config.js (see README).';
 const STORAGE_KEYS = { vt:'ipi_key_vt', shodan:'ipi_key_shodan', ipinfo:'ipi_key_ipinfo', proxycheck:'ipi_key_proxycheck' };
 const HISTORY_KEY  = 'ipi_scan_history';
 const THEME_KEY    = 'ipi_theme';
@@ -216,11 +235,13 @@ async function lookup(ip, fresh = false) {
 
   let data;
   try {
+    if (!WORKER_BASE) throw new Error(WORKER_SETUP_MSG);
     const freshParam = fresh ? '&fresh=1' : '';
     const r = await fetch(`${WORKER_BASE}/lookup?ip=${encodeURIComponent(ip)}&_=${Date.now()}${freshParam}`, { method:'GET', headers, cache:'no-store' });
     if (!r.ok) { const e = await r.json().catch(()=>({error:'Unknown error'})); throw new Error(e.error || `HTTP ${r.status}`); }
     data = await r.json();
   } catch (e) {
+    if (WORKER_IS_LOCAL && e instanceof TypeError) e.message = 'Cannot reach local worker at ' + LOCAL_WORKER_URL + ' — start it with `wrangler dev`.';
     setStatus(`Error: ${e.message}`, 'error');
     setLoading(false);
     $('empty').style.display='block';
@@ -660,6 +681,7 @@ $('my-ip-btn').addEventListener('click', async () => {
   btn.disabled=true; btn.textContent='…';
   setStatus('Detecting your IP via Cloudflare…','loading');
   try {
+    if (!WORKER_BASE) { setStatus(WORKER_SETUP_MSG,'error'); btn.textContent='My IP'; btn.disabled=false; return; }
     const r = await fetch(`${WORKER_BASE}/myip?_=${Date.now()}`, { cache:'no-store' });
     const d = await r.json();
     if (d.ip && d.ip!=='unknown') { $('ip-input').value=d.ip; lookup(d.ip); }
@@ -849,6 +871,7 @@ $('ai-btn').addEventListener('click', async () => {
       vtDomainTags:         (vd.tags||[]).slice(0,4).join(', ') || null,
     };
 
+    if (!WORKER_BASE) throw new Error(WORKER_SETUP_MSG);
     const r = await fetch(`${WORKER_BASE}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-No-Cache': String(Date.now()) },
