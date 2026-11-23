@@ -245,7 +245,7 @@ async function handleLookup(request, url, env = {}, ctx = null) {
 
   const fresh    = url.searchParams.get('fresh') === '1';
   const cacheKv  = env.SCAN_CACHE_KV || null;
-  const cacheKey = `scan:${input.toLowerCase()}`;
+  const cacheKey = `scan:v3:${input.toLowerCase()}`; // v3: IPinfo Max schema
 
   // Cache read — skip on fresh=1 or if KV not yet bound
   if (!fresh && cacheKv) {
@@ -752,12 +752,29 @@ async function fetchIpApi(ip, bust) {
 }
 
 async function fetchIpinfo(ip, token, bust) {
-  const p = token ? `?token=${token}&_=${bust}` : `?_=${bust}`;
+  // With a token, use the Max API (api.ipinfo.io/lookup). Its schema differs from the
+  // legacy /json one, so we return it as `max` alongside legacy-shaped basic fields
+  // that the rest of the app already reads. Without a token, fall back to the free endpoint.
+  const opts = () => ({ signal: AbortSignal.timeout(5000), cf: { cacheEverything: false } });
+  if (token) {
+    try {
+      const r = await fetch(`https://api.ipinfo.io/lookup/${encodeURIComponent(ip)}?token=${encodeURIComponent(token)}`, opts());
+      if (r.ok) {
+        const m = await r.json();
+        const g = m.geo || {};
+        return {
+          ip: m.ip, hostname: m.hostname,
+          city: g.city, region: g.region, country: g.country_code || g.country,
+          postal: g.postal_code, timezone: g.timezone,
+          loc: (g.latitude != null && g.longitude != null) ? `${g.latitude},${g.longitude}` : undefined,
+          org: m.as ? `${m.as.asn || ''} ${m.as.name || ''}`.trim() : undefined,
+          max: m,
+        };
+      }
+    } catch { /* fall through to free endpoint */ }
+  }
   try {
-    const r = await fetch(`https://ipinfo.io/${ip}/json${p}`, {
-      signal: AbortSignal.timeout(5000),
-      cf: { cacheEverything: false }
-    });
+    const r = await fetch(`https://ipinfo.io/${ip}/json?_=${bust}`, opts());
     if (!r.ok) return null;
     return r.json();
   } catch { return null; }

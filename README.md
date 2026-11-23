@@ -145,6 +145,31 @@ wrangler deploy
 
 Your worker is now live at `https://your-worker-name.your-cf-subdomain.workers.dev`.
 
+#### Point the frontend at your worker
+
+The worker URL is **not** hardcoded. `app.js` resolves it in this order:
+
+1. `window.IPSCAN_WORKER_URL` from an optional `config.js` (recommended, git-ignored)
+2. `WORKER_URL_PLACEHOLDER` in `app.js`, if you edit it into a real URL
+3. A local worker at `http://127.0.0.1:8787` when the page is served from `localhost`
+4. Otherwise the app shows a "No worker configured" message
+
+**Remote worker:** copy `config.example.js` to `config.js` next to `index.html` and set your deployed URL:
+
+```js
+window.IPSCAN_WORKER_URL = 'https://your-worker-name.your-cf-subdomain.workers.dev';
+```
+
+**Local worker:** create a `.dev.vars` file (git-ignored) so the worker's origin check accepts your local page, then run the worker and serve the frontend:
+
+```bash
+echo 'ALLOWED_ORIGIN=http://localhost:8000' > .dev.vars
+wrangler dev                    # worker on http://127.0.0.1:8787
+python3 -m http.server 8000     # frontend on http://localhost:8000
+```
+
+Add API keys for local runs to `.dev.vars` too (e.g. `IPINFO_TOKEN=...`).
+
 ### 5. Add worker secrets
 
 In the **Cloudflare Dashboard** → Workers & Pages → your worker → **Settings → Variables & Secrets**, add the following as **Secrets** (distinct from the `ALLOWED_ORIGIN`/`ALLOWED_ROOT_DOMAIN` Variables from step 2 — secrets are encrypted and never displayed again after saving):
